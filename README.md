@@ -16,7 +16,7 @@ Shared [Claude Code](https://claude.ai/claude-code) configuration — roles, ski
 ### 1. Clone the repo
 
 ```bash
-git clone <your-repo-url> ~/claude-config
+git clone https://github.com/vojtahavranek/claude.git ~/claude
 ```
 
 Clone it anywhere you like — the sync script copies files to `~/.claude/`.
@@ -40,14 +40,28 @@ This will:
 2. Copy all shared config files to `~/.claude/`
 3. Replace `{{PROJECTS_DIR}}` with the actual path
 
-### 4. After pulling updates
+### 4. Validate
+
+```bash
+./validate.sh
+```
+
+Checks that everything is correctly set up:
+- All required files are in `~/.claude/`
+- No unresolved `{{...}}` placeholders remain
+- Role and skill files are non-empty
+- TASKS.md path is resolved and reachable
+- `.env` exists and is gitignored
+
+### 5. After pulling updates
 
 ```bash
 git pull
 ./sync.sh
+./validate.sh
 ```
 
-That's it. Backups are timestamped so you never lose local changes.
+Backups are timestamped so you never lose local changes.
 
 ## Placeholders
 
