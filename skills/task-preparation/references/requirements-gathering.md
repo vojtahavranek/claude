@@ -194,7 +194,7 @@ Ask these follow-up questions to assess complexity:
 ## Question Asking Strategy
 
 **Batch questions appropriately:**
-- Ask 1-4 questions at a time using AskUserQuestion
+- Ask 1-4 questions at a time
 - Group related questions together
 - Don't overwhelm with 10+ questions at once
 

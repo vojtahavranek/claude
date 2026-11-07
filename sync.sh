@@ -68,15 +68,20 @@ sync_item() {
     # Backup existing
     backup_item "$target"
 
-    # Remove old target (file or directory)
-    rm -rf "$target"
-
-    # Copy
-    cp -r "$source" "$target"
+    # Replace old target with the repo copy. skills/synced/ is managed by
+    # Claude Code itself (built-in skills), so it survives the sync.
+    if [[ -d "$source" ]]; then
+        mkdir -p "$target"
+        find "$target" -mindepth 1 -maxdepth 1 ! -name synced -exec rm -rf {} +
+        cp -r "$source/." "$target/"
+    else
+        rm -rf "$target"
+        cp "$source" "$target"
+    fi
 
     # Replace placeholders in all .md and .sh files
     if [[ -d "$target" ]]; then
-        find "$target" -type f \( -name '*.md' -o -name '*.sh' \) | while read -r f; do
+        find "$target" -path "$target/synced" -prune -o -type f \( -name '*.md' -o -name '*.sh' \) -print | while read -r f; do
             replace_placeholders "$f"
         done
     elif [[ -f "$target" ]]; then

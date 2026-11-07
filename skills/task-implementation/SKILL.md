@@ -1,683 +1,147 @@
 ---
 name: task-implementation
 description: |
-  Use when user asks to "implement plan", "execute plan", or provides a plan file.
-
-  Reads saved plan and implements step-by-step with user approval.
-  Uses software-developer role, runs tests when available.
-
-  Use when: User has complete plan ready to implement
-  Don't use: User needs planning (use task-preparation)
+  Execute a saved implementation plan autonomously, step by step: a developer subagent builds each step, a fresh reviewer subagent checks it, the orchestrator verifies and commits. One approval up front, one at the end.
+  Use when: "implement plan", "execute plan", or the user hands over a plan file.
+  Plans with 2+ independent work streams worth parallelizing: use complex-task-implementation. No plan yet: use task-preparation.
 ---
 
-# Task Implementation Skill
+# Task Implementation
 
-## Overview
+You are the **orchestrator**. You do not write the plan's code yourself (except `inline` steps, below); you dispatch, verify, and commit. Subagent reports are claims; `git diff` and your own check runs are the truth.
 
-This skill executes implementation plans step-by-step with user approval at each stage. It focuses purely on **execution**, not planning.
+Invoking this skill is the user's explicit request to implement autonomously. The two gates below replace per-step approval.
 
-**Key characteristics**:
-- Execution-only (no planning or architecture design)
-- Uses software-developer role throughout
-- Approval required before each step
-- Runs tests when available
-- Flexible with plan formats
-- Simple error handling
-- **Tracks progress** via task system for visibility
+## Stage 0: Intake
 
-**Complementary skill**: Use `task-preparation` for planning and architecture design. This skill picks up where that ends.
+1. **Load the plan.** A path → read it. A bare name → `<project>/.claude/task/<name>.md`; not there → ask. Inline → use the message.
+2. **Read the project's CLAUDE.md** and collect every check it lists (tests, lint, format, types, build, E2E). Split them into **fast checks** (seconds; a dev runs them every step) and the **full suite** (everything; run at the end).
+3. **Git preflight.**
+   - Tracked files dirty (`git status --porcelain`, ignoring `??`) → stop, ask the user to commit or stash.
+   - On the default branch → `git checkout -b feature/<plan-name>` (or the branch the plan names). Always branch from the default branch.
+   - Record `BASE=$(git rev-parse HEAD)`.
+   - **Resume**: already on this plan's branch with commits → `git log --oneline $BASE..HEAD` (or since the merge-base with the default branch); every `Step N:` commit is done. Continue from the first missing step.
+4. **Assign each step a review depth**:
+   - `full`: developer subagent + reviewer subagent. The default for anything with logic, data, auth, or public interfaces.
+   - `light`: developer subagent only; the final review covers it. Mechanical changes (renames, wiring, config, docs).
+   - `inline`: you do it directly. A few lines with no judgement involved.
 
-## How to Use This Skill
+## Gate 1: Strategy
 
-**Invocation**: Just tell me to implement or execute a plan:
-```
-"implement plan: feature-name"
-"execute plan: /path/to/plan.md"
-"implement this plan: [paste plan content]"
-"/task-implementation /path/to/plan.md"
-```
-
-**Plan storage**: Plans are stored in the project's `.claude/task/` folder:
-- **Default**: `.claude/task/feature-name.md` inside the project directory
-- **Custom**: Any absolute or relative path you specify
-
-When you use `task-preparation`, it will ask you where to save the plan. Then use that same path with this skill.
-
-## When to Use This Skill
-
-**Use when**:
-- User says "implement plan: [name]" or "execute plan: [path]"
-- User provides a complete implementation plan
-- Focus should be on code quality and execution
-- User wants step-by-step control
-
-**Don't use when**:
-- User needs planning or architecture (use task-preparation)
-- Trivial single-step tasks (direct implementation is faster)
-- User wants to explore or research (use explore agent)
-
-## Prerequisites
-
-**Required**:
-- A plan file with implementation steps (from task-preparation or user-provided)
-- Plan location can be:
-  - Project-local: `./plans/feature.md` (recommended for team collaboration)
-  - Global: `~/.claude/plans/feature.md` (personal plans)
-  - Custom: Any path you specify
-
-**Minimal plan format**:
-```markdown
-# Plan: [Name]
-
-## Steps
-
-### Step 1: [Description]
-- Files: path/to/file.js
-- What: [What to implement]
-
-### Step 2: [Description]
-...
-```
-
-If information is missing (test command, success criteria), use common sense or ask user.
-
-## Progress Tracking
-
-**This skill tracks progress throughout** using the task system:
-
-- ✅ **Task created** at Stage 0 with total steps
-- ✅ **Task updated** after each step with current progress
-- ✅ **Task completed** when all steps done
-- ✅ **Resume capability** - can pause and resume later
-
-**User benefit**: You can see exactly where we are in the implementation at any time with `/tasks`.
-
-## Three-Stage Workflow
-
-### Stage 0: Plan Intake and Initialization
-
-**1. Load the plan**:
-
-**If user provides full path**:
-- `"implement plan: /path/to/plan.md"` → Read from that path
-- `"implement plan: ./plans/feature.md"` → Read from project directory
-
-**If user provides just a name**:
-- `"implement plan: feature-name"` → Look in the current project first:
-  - Check `.claude/task/feature-name.md` in the project directory
-  - If not found, ask the user for the path
-- Then read from the resolved path
-
-**If user provides inline plan**:
-- Parse directly from message content
-
-**2. Parse the plan**:
-- Extract steps (numbered list)
-- Note files to modify/create
-- Identify what needs to be done
-- If format unclear, ask user for clarification
-
-**3. Assess test environment** (optional):
-- Check for package.json (jest, mocha, vitest)
-- Check for requirements.txt (pytest)
-- Check for Cargo.toml (cargo test)
-- Ask user: "What command runs tests?" if not obvious
-- Note: No tests? That's okay, we'll suggest adding them later
-
-**4. Create task**:
-```javascript
-TaskCreate({
-  subject: "Implement [feature name from plan]",
-  description: "[Plan summary]",
-  activeForm: "Implementing [feature name]",
-  metadata: {
-    phase: "execution",
-    totalSteps: N,
-    currentStep: 0,
-    source: "task-implementation"
-  }
-})
-```
-
-**5. Adopt developer role**:
-- Read `~/.claude/roles/software-developer.md`
-- Explicitly state: "I'm now acting as software-developer to implement this plan."
-- Apply developer mindset: clean code, proper error handling, testing
-
-### Stage 1: Execute Steps (Main Loop)
-
-**For each step in the plan**:
-
-#### 1. Present the Step and Request Approval
-
-**CRITICAL**: This is a single atomic action. Present the step details, then call AskUserQuestion. Do NOT proceed to section 2 (Execute) until the user has responded. Do not assume or guess the user's answer.
-
-Show the step details to the user, then STOP and wait for explicit approval:
+Present, then ask with AskUserQuestion (Approve / Adjust / Cancel):
 
 ```
-Step X of Y: [Description]
-
-Files to be affected:
-- path/to/file1.js (new file, ~50 LOC)
-- path/to/file2.js (modify existing)
-
-What I will do:
-- [Detailed implementation approach]
-- [Specific functions/classes to add or modify]
-- [Key logic to implement]
-
-How I will implement it:
-- [Concrete technical approach]
-- [Libraries/patterns I'll use]
-- [Structure and organization]
-
-Why this approach:
-- [Rationale for technical choices]
-- [How it fits with existing code]
-
-Success criteria:
-- [How we'll verify it works]
+Plan: <name>   Branch: <branch> @ <short BASE>
+Steps:
+  1. <title> — <files> — full
+  2. <title> — <files> — light
+  ...
+Fast checks: <commands>   Full suite: <commands>
+Delivery: <PR to main | commit only, per project CLAUDE.md>
+Risks / plan gaps: <anything the plan leaves unclear>
 ```
 
-**STOP here. Use the AskUserQuestion tool now.** Ask the user:
-- "Approve execution of Step X of Y: [Description]?"
-- Options: Approve and execute | Skip this step | Modify approach | Pause and resume later
+If the plan has 2+ independent streams across 8+ steps, say complex-task-implementation would parallelize it. Adjust → revise and re-present.
 
-Do not call Write, Edit, or Bash until the user has responded via AskUserQuestion. Handle the response in section 2 below.
+## Stage 1: Step loop
 
-#### 2. Execute (Only If Approved)
+For each step, in order:
 
-**If user chooses A (Approve)**:
+### 1. Develop
+`full` / `light`: spawn `Agent(subagent_type: "general-purpose", name: "dev-step-<N>", prompt: <Developer prompt>)`. No worktree: steps are sequential in the main checkout, so container-backed checks see the real changes.
+`inline`: make the change yourself, then go to **Verify**.
 
-- Use Write tool for new files
-- Use Edit tool for modifications
-- Apply software-developer principles:
-  - Clean, readable code
-  - Proper error handling (try-catch, validation)
-  - Input validation at boundaries
-  - Security best practices (no SQL injection, XSS, etc.)
-  - Follow existing code patterns
-  - DRY without over-abstraction
-  - Clear variable/function names
+### 2. Verify
+- `git status --porcelain` + `git diff --stat`: every touched file belongs to this step. Out-of-scope edits → revert them or send the dev back; a genuine need for more files → **interrupt**.
+- Run the fast checks yourself. Red → SendMessage the failure output to `dev-step-<N>`, re-verify.
+- Stage exactly this step's files: `git add <paths>` (never `-A`).
 
-**If user chooses B (Skip)**:
-- Document the skip
-- Update metadata: add step number to skippedSteps
-- Move to next step
+### 3. Review (`full` only)
+Spawn a new `Agent(subagent_type: "general-purpose", prompt: <Reviewer prompt>)`. It sees the step spec and the staged diff, never the developer's report, so it judges the code rather than the narrative.
 
-**If user chooses C (Modify)**:
-- Listen to user's alternative approach
-- Re-present step with new approach
-- Request approval again
+- **APPROVED** → commit.
+- **NEEDS FIXES** → SendMessage the Critical/Important list to `dev-step-<N>` (same agent, context intact), then Verify again and spawn a fresh reviewer with the new diff. **Max 2 fix rounds.**
+- Still NEEDS FIXES after round 2: Important-only → record as **unresolved**, commit. Any Critical → **interrupt**.
 
-**If user chooses D (Pause)**:
-- Update task status to paused
-- Document progress (completed steps, current step)
-- Exit gracefully
-- User can resume later by re-invoking skill
+### 4. Commit
+`git commit -m "Step <N>: <title>"` with the attribution trailer. The commit is the progress record; resume relies on it.
 
-#### 3. Run Tests (If Available)
+One line to the user, then continue without waiting:
+`Step N/M ✓ <title> — <files changed> — review: <approved in R rounds | light | inline>`
 
-**After implementing, if tests exist**:
+## Stage 2: Final verification
 
-```bash
-# Run relevant tests
-npm test -- path/to/relevant.test.js
+1. **Full suite**: every check from the project's CLAUDE.md, all green. Failures → spawn a fix developer with the output, re-run; still red after 2 rounds → **interrupt**. The task is not done while a check is red.
+2. **Final review**: one fresh reviewer over `git diff $BASE..HEAD`, with the whole plan. Focus: cross-step integration (interfaces, types, wiring, missing glue), the `light` steps, plan compliance, the unresolved list. Fix Critical/Important the same way, max 2 rounds, then re-run the full suite.
+3. **Plan acceptance checklist**: complete every item completable now (docs, `.env.example`, CLAUDE.md updates); list the rest (prod verification, manual steps) explicitly.
+4. **Deliver** per project convention: push, `gh pr create` targeting the default branch, report CI status.
 
-# Or run full suite
-npm test
-```
-
-**Show results**:
-- Pass/fail count
-- Failed test details if any
-- Coverage change if available
-
-**Handle test failures**:
-- Show error details
-- Offer to fix the implementation
-- User can choose: fix and retry, or skip and continue
-- Don't block forever - user decides whether to proceed
-
-**If no tests**:
-- Note: "No tests found for this code"
-- Continue without blocking
-- Will suggest adding tests in Stage 2
-
-#### 4. Verify Success Criteria
-
-Check the success criteria from the step:
-- Does it work as intended?
-- Can we verify the outcome?
-- Manual verification if needed (read files, check structure)
-
-#### 5. Show Results
+## Gate 2: Summary
 
 ```
-Results for Step X:
-
-What changed:
-- Created: path/to/file1.js (~52 LOC)
-- Modified: path/to/file2.js (+18 LOC)
-
-Verification:
-✓ Success criteria met: [criteria from plan]
-✓ Tests: [5/5 passing] or [No tests available]
-✓ Code follows project patterns
-
-Quality notes:
-- Added error handling for [scenarios]
-- Input validation included
-- Follows existing [pattern] style
-
-Next step preview:
-Step X+1: [Brief description of next step]
+Done: <plan>  —  <N> steps, <commits> commits on <branch>
+PR: <url> (CI: <status>)
+Checks: <each command — pass>
+Review: <full steps approved / rounds>, final review: <PASS | issues fixed>
+Unresolved: <list, or none>
+Remaining manual items: <list, or none>
 ```
 
-#### 6. Update Progress (IMPORTANT: Always do this)
+Then mark the plan's entry `[x]` in `{{PROJECTS_DIR}}/TASKS.md` and bump its "Last updated" date.
 
-**CRITICAL**: Update task after EVERY step to maintain progress visibility.
+## Interrupt
 
-```javascript
-TaskUpdate({
-  taskId: [ID],
-  metadata: {
-    currentStep: X,
-    skippedSteps: [array of skipped step numbers],
-    completedSteps: [array of completed step numbers],
-    lastUpdated: new Date().toISOString()
-  }
-})
-```
+Mid-run, stop and AskUserQuestion only for: a step needing files or behaviour outside the plan, a dev-reported blocker, a Critical issue unresolved after 2 rounds, checks red after 2 fix rounds, or the plan contradicting the code. State what happened, what you tried, and 2–3 concrete options. Everything else you decide and note in the summary.
 
-**Why this matters**:
-- User can check progress anytime with `/tasks`
-- Implementation can take hours/days - task tracking provides visibility
-- Supports pause/resume workflow
-- Shows exactly what's done and what's remaining
+## Prompts
 
-**User can check progress**: Type `/tasks` to see current status at any time.
-
-#### 7. Handle Errors
-
-**If step execution fails**:
+### Developer
 
 ```
-ERROR during Step X execution:
+You implement Step <N> of a plan, autonomously. Read ~/.claude/roles/software-developer.md
+and adopt it; the orchestrator's instructions here override its approval-waiting rule.
 
-Error type: [Syntax/Runtime/Test Failure/Tool Error]
-Error message: [Full error text]
+Plan: <path>  (read it for context; implement ONLY Step <N>)
+Step <N>: <title>
+What / how: <step text from the plan>
+Success criteria: <criteria>
+Files in scope: <list>
+Fast checks: <commands>
 
-Probable cause:
-[Analysis of what went wrong]
+Work:
+1. Read the files in scope and their neighbours; match the surrounding code's style.
+2. Implement the step. Add or update tests for the behaviour you change.
+3. Run the fast checks until green.
+4. Leave changes uncommitted; the orchestrator commits.
 
-What would you like to do?
-A) Retry with fix (I'll implement: [specific fix])
-B) Retry after you manually fix something
-C) Skip this step and continue
-D) Abort workflow (stop here)
+Needing a file outside scope, or the plan being wrong for this code, is a blocker:
+stop and report it instead of working around it.
+
+Report: files changed, checks run with results, blockers, notes for the reviewer.
+You may receive follow-up messages with review feedback or check failures; fix
+Critical and Important items, rerun the fast checks, report again.
 ```
 
-**Recovery actions**:
-- **A**: Implement fix, re-execute, verify
-- **B**: Wait for user, re-execute, verify
-- **C**: Document skip, move to next step
-- **D**: Mark task paused, document progress, exit
-
-**Repeat loop** for all remaining steps.
-
-### Stage 2: Completion and Summary
-
-**1. Optional full test run**:
-If tests exist, offer to run full suite:
-```bash
-npm test --coverage  # or equivalent
-```
-
-Show coverage if available.
-
-**2. Generate summary**:
+### Reviewer
 
 ```
-Implementation Complete!
+You review Step <N> of a plan. Read ~/.claude/roles/code-reviewer.md and adopt its
+review standards; report to the orchestrator rather than waiting on a user. Read-only:
+change no files.
 
-Summary:
-- Total steps: N
-- Completed: X
-- Skipped: Y (steps: [numbers])
-- Tests: [status]
+Plan: <path>
+Step <N>: <title>
+What / how: <step text>
+Success criteria: <criteria>
+Diff: run `git diff --cached`; read surrounding code as needed.
 
-Files changed:
-- Created: [list]
-- Modified: [list]
+Check: correctness and edge cases, security, error handling, tests covering the
+changed behaviour, plan compliance, success criteria met, consistency with the codebase.
+Flag only what you can point to in the diff.
 
-What was accomplished:
-- [Key outcome 1]
-- [Key outcome 2]
-- [Key outcome 3]
+Output:
+Verdict: APPROVED | NEEDS FIXES
+Critical (blocks): - <issue> | <file:line> | <why> | <fix>
+Important (should fix): - ...
+Suggestions (never block): - ...
 ```
-
-**3. Suggest next steps** (simple, not pushy):
-
-**If no tests or low coverage**:
-```
-Testing suggestions:
-- Consider adding tests for [specific areas]
-- No test framework? Consider jest (JS) or pytest (Python)
-- Tests would help catch regressions
-```
-
-**If everything looks good**:
-```
-Suggestions:
-- Test the implementation manually
-- Consider adding documentation if needed
-- Review the changes before committing
-```
-
-**4. Mark task completed**:
-
-```javascript
-TaskUpdate({
-  taskId: [ID],
-  status: "completed",
-  metadata: {
-    phase: "completed",
-    completedSteps: X,
-    skippedSteps: [array],
-    totalSteps: N
-  }
-})
-```
-
-**5. Update TASKS.md**:
-
-Mark the task as complete in the centralized task tracker:
-
-**File**: `{{PROJECTS_DIR}}/TASKS.md`
-
-Change the task under the project section:
-```
-- [~] [Feature name]  →  - [x] [Feature name]
-```
-
-Update the "Last updated" date at the top of the file.
-
-## Software-Developer Role Integration
-
-**Load once at Stage 0**:
-```javascript
-Read({ file_path: "~/.claude/roles/software-developer.md" })
-```
-
-**Apply throughout all stages**:
-- **Clean code**: Readable, maintainable, well-organized
-- **Error handling**: Try-catch blocks, validation, helpful messages
-- **Security**: Input sanitization, no injection vulnerabilities
-- **Testing**: Run tests, verify implementations
-- **Pragmatism**: Balance quality with simplicity
-- **Patterns**: Follow existing code conventions
-
-**CRITICAL approval discipline** (from developer role):
-- NEVER write code without approval
-- Present detailed plan BEFORE each step
-- Explain WHAT, HOW, and WHY
-- Wait for explicit user approval
-- Only then implement
-
-## Working with Plan Formats
-
-**This skill is flexible** - we work with whatever plan we get.
-
-**Ideal format** (from task-preparation):
-- Summary
-- Numbered steps
-- Files per step
-- What to implement
-- Success criteria
-
-**Minimal acceptable**:
-- Step descriptions
-- Files to change
-- Basic "what to do"
-
-**If information is missing**:
-- Use common sense for obvious cases
-- Ask user if unclear
-- Don't be picky about format
-- Focus on getting work done
-
-**Examples of accepted inputs**:
-- `~/.claude/plans/feature-name.md` (saved by task-preparation)
-- `/path/to/custom-plan.md` (user file)
-- Inline markdown in user message
-- Simple numbered list with file paths
-
-## Testing Integration
-
-**Philosophy**: Run tests when available, but don't block forever.
-
-**Stage 0: Assess test environment**:
-- Look for test frameworks
-- Identify test command
-- Note existing tests
-
-**Stage 1: Run tests after each step**:
-- If tests exist, run them
-- Show results
-- If tests fail, offer to fix
-- User decides whether to proceed
-
-**Stage 2: Suggest improvements**:
-- Identify gaps in test coverage
-- Recommend test frameworks if none
-- Suggest specific tests to add
-- Keep it simple, not pushy
-
-**Never**:
-- Block forever on test failures
-- Force user to add tests
-- Auto-install testing tools
-- Make tests mandatory
-
-## Error Handling
-
-**Types of errors**:
-1. **Syntax errors**: Show error, offer fix, retry
-2. **Runtime errors**: Analyze cause, suggest fix
-3. **Test failures**: Show details, offer to fix or skip
-4. **Tool errors**: Explain issue, try alternative approach
-
-**Recovery flow**:
-1. Capture error with full details
-2. Diagnose probable cause
-3. Suggest specific fixes
-4. Offer 4 options: retry with fix, retry after user fix, skip, abort
-5. Respect user choice
-6. Continue or exit appropriately
-
-**Keep it simple**:
-- Don't over-analyze
-- Offer practical solutions
-- Let user decide whether to proceed
-- Document issues in summary
-
-## Task Management (Critical for Long Implementations)
-
-**Why task tracking matters**:
-- Implementation can take **hours or days** for complex features
-- User needs visibility into progress at any time
-- Supports natural workflow interruptions (meetings, breaks, other work)
-- Enables pause/resume without losing context
-- Shows exactly what's done and what remains
-
-**TaskCreate at Stage 0** (Always do this first):
-```javascript
-TaskCreate({
-  subject: "Implement [feature name from plan]",
-  description: "[Plan summary with key objectives]",
-  activeForm: "Implementing [feature name]",
-  metadata: {
-    phase: "execution",
-    totalSteps: N,
-    currentStep: 0,
-    completedSteps: [],
-    skippedSteps: [],
-    source: "task-implementation",
-    planPath: "[path to plan file]"
-  }
-})
-```
-
-**TaskUpdate after EVERY step** (Never skip this):
-```javascript
-TaskUpdate({
-  taskId: [ID],
-  status: "in_progress",
-  metadata: {
-    currentStep: X,
-    completedSteps: [1, 2, 3, ...],
-    skippedSteps: [5, ...],
-    lastUpdated: new Date().toISOString()
-  }
-})
-```
-
-**TaskUpdate on completion**:
-```javascript
-TaskUpdate({
-  taskId: [ID],
-  status: "completed",
-  metadata: {
-    phase: "completed",
-    completedSteps: X,
-    skippedSteps: [array],
-    totalSteps: N
-  }
-})
-```
-
-**TaskUpdate on pause**:
-```javascript
-TaskUpdate({
-  taskId: [ID],
-  status: "paused",
-  metadata: {
-    phase: "paused",
-    currentStep: X,
-    nextStep: X+1,
-    completedSteps: [array],
-    skippedSteps: [array]
-  }
-})
-```
-
-**User can check progress anytime**: `/tasks` shows current status, which step, progress percentage.
-
-## Pause and Resume
-
-**User chooses "Pause" during any step**:
-1. Update task to paused status
-2. Document progress:
-   - Steps completed: [list]
-   - Current step: [number and description]
-   - Steps remaining: [count]
-3. Save state in task metadata
-4. Exit gracefully
-
-**To resume**:
-- User re-invokes skill with same plan
-- Read task metadata to find last completed step
-- Continue from next step
-- Maintain full context from plan
-
-## Tips and Best Practices
-
-**For optimal results**:
-
-1. **Trust the plan**: Don't re-plan or redesign during execution
-2. **Approve deliberately**: Review each step before approving
-3. **Fix issues promptly**: Don't accumulate broken steps
-4. **Run tests regularly**: Catch issues early
-5. **Skip strategically**: Some steps might not apply anymore
-6. **Pause when needed**: Take breaks on complex implementations
-
-**For Claude executing this skill**:
-
-1. **Always load developer role** at Stage 0
-2. **Never skip approval** - always wait for user choice
-3. **Be explicit about what you'll do** - WHAT/HOW/WHY every time
-4. **Show clear results** - user should see what changed
-5. **Handle errors gracefully** - offer options, don't give up
-6. **Keep it simple** - don't over-engineer, trust the plan
-7. **Respect user decisions** - if they want to skip or proceed despite issues, that's okay
-
-## Reference Materials
-
-**Load when needed**:
-
-- `references/best-practices.md` - Code quality reminders, common patterns, security tips
-  - Load when: Implementing complex logic, uncertain about approach
-
-**Example workflow**:
-
-- `examples/simple-execution.md` - Complete workflow example
-  - Load when: User asks how the skill works, or you need a reference
-
-**Don't load by default** - only when actually needed to save context.
-
-## Workflow Summary
-
-```
-User: "implement plan: feature-name"
-  ↓
-Stage 0: Plan Intake
-  - Read ~/.claude/plans/feature-name.md
-  - Parse 5 steps
-  - Check for tests (found: npm test)
-  - Create task
-  - Adopt software-developer role
-  ↓
-Stage 1: Execute Steps (5 iterations)
-  For each step:
-    1. Present step and request approval via AskUserQuestion (STOP until user responds)
-    2. If approved: Implement code
-    3. Run tests (if available)
-    4. Verify success criteria
-    5. Show results
-    6. Update progress
-  ↓
-Stage 2: Completion
-  - Run full test suite (optional)
-  - Generate summary
-  - Suggest next steps
-  - Mark task completed
-  ↓
-Done!
-```
-
-## Integration Points
-
-- `~/.claude/plans/[name].md` - Read plan created by task-preparation
-- `~/.claude/roles/software-developer.md` - Primary role for implementation
-- TaskCreate - Create execution task at Stage 0
-- TaskUpdate - Update progress after steps, mark completed
-- AskUserQuestion - Request approval at each step
-- Write/Edit - Implement code changes
-- Bash - Run tests and verify
-
-## Complementary Skills
-
-**task-preparation** (planning):
-- Creates the plans this skill executes
-- Handles requirements, architecture, design
-- Stops at Approval Gate #1 (plan approval)
-- Saves plans to user-specified location (project-local, global, or custom)
-
-**task-implementation** (this skill):
-- Executes saved plans
-- Handles code implementation
-- Approval Gate #2 (per-step approval)
-- Runs tests and verifies quality
-
-**Clear separation**: No overlap, complementary workflow.

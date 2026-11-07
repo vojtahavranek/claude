@@ -118,7 +118,7 @@ This phase focuses entirely on understanding, planning, and validating the appro
 **Purpose:** Systematically collect comprehensive information about what you need.
 
 **Procedure:**
-1. I will use AskUserQuestion to gather requirements across key categories:
+1. I will ask you questions to gather requirements across key categories:
    - **Goal and Objective**: What are we trying to achieve and why?
    - **Scope and Components**: What files, systems, or components are involved?
    - **Constraints**: Are there performance, compatibility, or style requirements?
@@ -199,9 +199,15 @@ I will suggest: "This task is complex, spanning [X areas]. Consider splitting in
 
 **Output:** Either confirmation to proceed as-is, or a refined scope focusing on one subtask.
 
-### Stage 4: Peer Review (Second Architect - Plan Agent)
+### Stage 4: Peer Review (Second Architect — Independent Teammate)
 
 **Purpose:** Challenge the first plan to find weaknesses, gaps, and improvements through independent review.
+
+**Why an independent reviewer matters:**
+- True independent perspective (no bias from creating the plan)
+- Fresh eyes catch issues self-review might miss
+- More authentic "second architect" review
+- Better quality feedback at modest cost increase
 
 **Critical Review Procedure:**
 
@@ -210,25 +216,26 @@ I will suggest: "This task is complex, spanning [X areas]. Consider splitting in
    - Architectural plan from Stage 2
    - Complexity assessment from Stage 3
 
-2. **Spawn Plan agent** using Task tool:
-   - Use `subagent_type: "Plan"` for independent architect review
+2. **Spawn a reviewer teammate** for independent architect review:
+   - If Agent Teams is enabled: spawn a teammate who performs the review independently with their own context
+   - If Agent Teams is not available: spawn a `general-purpose` Agent with `subagent_type="general-purpose"` that performs the review
    - Provide comprehensive prompt with complete context
    - Include the initial plan for critical analysis
    - Request systematic review using validation framework
 
-3. **Plan agent performs independent review:**
-   - Agent loads `~/.claude/roles/software-architect.md` for architect perspective
-   - Agent loads `references/validation-framework.md` for review criteria
-   - Agent challenges assumptions and identifies risks
-   - Agent suggests alternatives and improvements
-   - Agent returns structured critical review
+3. **Reviewer performs independent review:**
+   - Loads `~/.claude/roles/software-architect.md` for architect perspective
+   - Loads `~/.claude/skills/task-preparation/references/validation-framework.md` for review criteria
+   - Challenges assumptions and identifies risks
+   - Suggests alternatives and improvements
+   - Returns structured critical review
 
 4. **Collect review results:**
-   - Receive Plan agent's independent critical analysis
+   - Receive reviewer's independent critical analysis
    - Extract actionable feedback and concerns
    - Pass structured review to Stage 5 for plan refinement
 
-**What the review agent evaluates:**
+**What the reviewer evaluates:**
 - **Assumptions**: Are they valid and well-justified?
 - **Failure modes**: What could go wrong with this approach?
 - **Alternatives**: Are there simpler or better approaches?
@@ -241,60 +248,44 @@ I will suggest: "This task is complex, spanning [X areas]. Consider splitting in
 - **Testability**: Can this be effectively tested?
 - **Complexity**: Unnecessary complexity or technical debt?
 
-**Why sub-agent approach:**
-- ✅ True independent perspective (no bias from creating the plan)
-- ✅ Fresh eyes catch issues self-review might miss
-- ✅ More authentic "second architect" review
-- ✅ Better quality feedback at modest cost increase
-
 **Output:** Independent critical review identifying strengths, concerns, critical issues, and questions.
 
-#### Example: Task Tool Invocation for Peer Review
+#### Reviewer Teammate Prompt Template
 
-**CRITICAL**: The prompt to the Plan agent must be extremely explicit. Don't assume the agent knows what to do - provide complete step-by-step instructions.
+**CRITICAL**: The prompt must be explicit and self-contained. The reviewer has no prior context — provide everything they need.
 
-**Example invocation:**
+```
+You are a second software architect performing independent peer review of an initial architectural plan.
 
-```javascript
-Task({
-  subagent_type: "Plan",
-  description: "Review architectural plan",
-  prompt: `You are a second software architect performing independent peer review of an initial architectural plan.
+FIRST: Read ~/.claude/roles/software-architect.md and adopt the architect perspective.
+Then: Read ~/.claude/skills/task-preparation/references/validation-framework.md for review criteria.
 
 ## Context
 
 **User Requirements:**
-${fullRequirementsFromStage1}
+[paste full requirements from Stage 1]
 
 **Initial Architectural Plan (to review):**
-${fullPlanFromStage2}
+[paste full plan from Stage 2]
 
 **Complexity Assessment:**
-${complexityAssessmentFromStage3}
+[paste assessment from Stage 3]
 
 ## Your Task (follow these steps exactly)
 
-1. **Load the software architect role:**
-   - Read ~/.claude/roles/software-architect.md
-   - Adopt the architect perspective and thinking style
+1. **Perform critical review systematically:**
+   - Challenge assumptions — are they valid and well-justified?
+   - Identify failure modes — what could go wrong?
+   - Find simpler alternatives — is this over-engineered?
+   - Check edge cases — what error scenarios were missed?
+   - Verify integration points — are they clearly defined?
+   - Assess risks — what are the biggest concerns?
+   - Evaluate security — any vulnerabilities or attack vectors?
+   - Test consistency — does it match existing patterns?
+   - Check testability — can this be effectively tested?
+   - Review complexity — unnecessary complexity or technical debt?
 
-2. **Load the review framework:**
-   - Read references/validation-framework.md (in the skill directory)
-   - Use it as a systematic checklist for review
-
-3. **Perform critical review systematically:**
-   - Challenge assumptions - are they valid and well-justified?
-   - Identify failure modes - what could go wrong?
-   - Find simpler alternatives - is this over-engineered?
-   - Check edge cases - what error scenarios were missed?
-   - Verify integration points - are they clearly defined?
-   - Assess risks - what are the biggest concerns?
-   - Evaluate security - any vulnerabilities or attack vectors?
-   - Test consistency - does it match existing patterns?
-   - Check testability - can this be effectively tested?
-   - Review complexity - unnecessary complexity or technical debt?
-
-4. **Be constructive but critical:**
+2. **Be constructive but critical:**
    - Find real issues, not nitpicks
    - Provide specific, actionable suggestions
    - Explain the impact of each concern
@@ -303,7 +294,7 @@ ${complexityAssessmentFromStage3}
 ## Required Output Format
 
 **Strengths:**
-- [What's good about this plan - 2-3 items]
+- [What's good about this plan — 2-3 items]
 
 **Concerns:**
 - **Category:** [e.g., Security, Performance, Error Handling]
@@ -317,17 +308,16 @@ ${complexityAssessmentFromStage3}
 **Questions:**
 - [Areas needing clarification from the user or first architect]
 
-Be thorough, specific, and actionable in your review. This is an independent peer review - you have not seen this plan before and should approach it with fresh eyes.
-`
-})
+Be thorough, specific, and actionable. This is an independent peer review —
+you have not seen this plan before and should approach it with fresh eyes.
 ```
 
 **Key success factors:**
-1. **Complete context** - Include full requirements and plan
-2. **Explicit instructions** - Numbered steps the agent must follow
-3. **Specific framework** - Reference validation-framework.md
-4. **Required format** - Structured output template
-5. **Clear role** - Agent understands it's an independent reviewer
+1. **Complete context** — Include full requirements and plan (reviewer has no prior context)
+2. **Explicit instructions** — Numbered steps the reviewer must follow
+3. **Specific framework** — Reference validation-framework.md with full path
+4. **Required format** — Structured output template
+5. **Clear role** — Reviewer understands it's an independent review
 
 ### Stage 5: Plan Refinement
 
@@ -397,7 +387,7 @@ Each step must be:
 
 **How I will ask for approval:**
 
-I will use AskUserQuestion with these options:
+I will present these options and wait for your response:
 - **Approve and save plan** - Plan looks good, save to file
 - **Request modifications** - Specify which parts need changes
 - **Reject and start over** - Fundamental issues, need new approach
@@ -465,8 +455,8 @@ I will use AskUserQuestion with these options:
    This plan has [N] steps with [M] independent work streams suitable for parallel execution.
 
    To implement:
-   - Parallel (faster, autonomous with validation loop): "execute complex plan: [path]"
-   - Step-by-step (controlled, per-step approval): "implement plan: [path]"
+   - Parallel waves (Agent Teams): "execute complex plan: [path]"
+   - Sequential (dev + reviewer subagents per step): "implement plan: [path]"
    ```
 
    **Otherwise:**
@@ -533,7 +523,7 @@ Update the "Last updated" date at the top of the file.
 **Planning phase issues:**
 If issues arise during planning (missing context, unclear requirements, etc.):
 
-1. **Ask clarifying questions** - Use AskUserQuestion to gather needed information
+1. **Ask clarifying questions** - Ask the user directly to gather needed information
 2. **Explore codebase** - Read relevant files to understand current implementation
 3. **Present options** - When multiple approaches exist, present trade-offs
 
@@ -611,12 +601,12 @@ I will load additional reference files when needed:
 2. **Gather requirements** - Systematic questions about what to build
 3. **Architect planning** (first pass) - Design approach, architecture, components
 4. **Assess complexity** - Suggest splits if needed
-5. **Peer review** (Plan agent) - Independent critical review via sub-agent, identify risks
+5. **Peer review** (reviewer teammate) - Independent critical review, identify risks
 6. **Refine plan** - Incorporate feedback
 7. **Break down into steps** - Atomic, numbered implementation steps
 8. **→ APPROVAL GATE #1: User approves complete plan**
-9. **Ask where to save plan** - Project-local, global, or custom path
-10. **Save plan file** - Structured markdown with all details
+9. **Save plan file** - Default: `.claude/task/[name].md` in project (ask only if unclear)
+10. **Register in TASKS.md** - Add entry under appropriate project section
 11. **Complete task** - Mark done, provide next steps
 
 **Skill ends here.** For implementation, use:

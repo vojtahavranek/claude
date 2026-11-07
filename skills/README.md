@@ -15,7 +15,7 @@
 | Skill | Description | When to Use | Invocation |
 |-------|-------------|-------------|------------|
 | **task-preparation** | Architect-led planning workflow | Planning complex features, need architecture design | `"use task preparation for [feature]"` |
-| **task-implementation** | Developer-focused execution | Execute existing plan step-by-step | `"implement plan: [path/name]"` |
+| **task-implementation** | Developer-focused execution | Execute a plan autonomously, sequentially | `"implement plan: [path/name]"` |
 | **complex-task-implementation** | Autonomous parallel execution | Complex plans with independent work streams | `"execute complex plan: [path]"` |
 
 ### task-preparation
@@ -42,51 +42,47 @@
 ---
 
 ### task-implementation
-**Purpose**: Execute implementation plans with developer focus
+**Purpose**: Autonomous sequential execution of a plan with developer+reviewer subagents
 
 **Workflow**:
-1. Reads plan file
-2. Adopts software-developer role
-3. For each step: Present → Approve → Implement → Test → Verify
-4. Tracks progress throughout
-5. Generates summary
+1. Reads plan, collects checks from project CLAUDE.md, branches from main
+2. Gate 1: user approves strategy (steps + review depth full/light/inline)
+3. Per step: dev subagent implements → orchestrator verifies → reviewer subagent reviews → fix (max 2 rounds) → commit
+4. Full check suite + whole-branch review + PR
+5. Gate 2: summary
 
 **When to use**:
-- Have a complete plan ready to implement
-- Want step-by-step approval control
-- Need progress tracking for long implementations
-- Focus on code quality and testing
+- Any plan whose steps run in order (most plans)
 
-**Output**: Implemented code with tests, tracked progress
+**Output**: Branch with one commit per step, PR, all checks green
 
 **Learn more**: `~/.claude/skills/task-implementation/USAGE.md`
 
 ### complex-task-implementation
-**Purpose**: Autonomous parallel plan execution with iterative validation
+**Purpose**: Autonomous parallel execution using Agent Teams with developer+reviewer duos
 
 **Workflow**:
 1. Analyzes plan dependencies, computes parallel execution waves
 2. Approval Gate 1: User approves execution strategy
-3. Spawns parallel agents in isolated worktrees (per wave)
-4. Merges results, runs validation loop (review -> fix -> re-review)
-5. Approval Gate 2: User accepts or rejects final results
+3. Spawns developer+reviewer duo teammates per step (via Agent Teams)
+4. Each duo iterates inline: implement → review → fix → re-review
+5. Merges results per wave, runs lightweight integration check
+6. Approval Gate 2: User accepts or rejects final results
 
 **When to use**:
-- Complex plan with 8+ steps
-- Plan has independent work streams (parallelizable)
-- User trusts the plan and wants speed
+- Plan has 2+ independent work streams (parallelizable)
 - task-preparation suggested this skill
 
 **Comparison with task-implementation**:
 
 | | task-implementation | complex-task-implementation |
 |---|---|---|
-| **Approval** | Per-step (N gates) | Strategy + final only (2 gates) |
-| **Execution** | Sequential | Parallel (waves) |
-| **Validation** | User verifies each step | Automated review-fix loop |
-| **Best for** | Learning codebase, risky changes | Trusted plans, speed, complex work |
+| **Approval** | Strategy + final (2 gates) | Strategy + final (2 gates) |
+| **Execution** | Sequential, main checkout | Parallel waves, worktrees (Agent Teams) |
+| **Quality** | Dev + reviewer subagents per step | Developer+reviewer duos per step |
+| **Best for** | Most plans | Independent work streams |
 
-**Output**: Implemented code with automated review, tracked progress
+**Output**: Implemented code with inline duo review, tracked progress
 
 **Learn more**: `~/.claude/skills/complex-task-implementation/USAGE.md`
 
@@ -140,7 +136,7 @@ Claude: [Guides through requirements, architecture, peer review]
 
 Step 2: Implementation
 You: "implement plan: ./plans/auth-system.md"
-Claude: [Executes step-by-step with approvals]
+Claude: [Gate 1 approval, then executes autonomously with dev+reviewer subagents]
         Tracks progress throughout
 
 Result: Clean separation, documented approach, quality code
@@ -178,10 +174,12 @@ Result: Documented approach, team alignment, parallel work
 
 ## Creating Custom Skills
 
+Create skills in the config repo (`skills/my-skill/`), not in `~/.claude/skills/`: `sync.sh` overwrites `~/.claude/skills/` from the repo. See "Source of truth" in the global CLAUDE.md.
+
 ### Skill Structure
 
 ```
-~/.claude/skills/my-skill/
+skills/my-skill/
 ├── SKILL.md                    # Main workflow (required)
 │   ├── Frontmatter (name, description)
 │   ├── Overview
@@ -520,7 +518,7 @@ Architect: git commit -m "Add DB migration plan"
 # Developer implements later
 Developer: git pull
 Developer: "implement plan: ./plans/db-migration.md"
-Claude: [Executes step-by-step]
+Claude: [Executes autonomously, step by step]
         [Tracks progress]
         [Completes implementation]
 Developer: git commit -m "Implement DB migration per plan"
