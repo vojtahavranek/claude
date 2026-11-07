@@ -276,10 +276,20 @@ Recognize these patterns as role exit requests:
 
 ## Customization
 
-You can extend this system by:
+### Source of truth: the config repo
 
-- **Adding new roles**: Create new `.md` files in `~/.claude/roles/`
-- **Customizing existing roles**: Edit role files to match your preferences
+`~/.claude/CLAUDE.md`, `~/.claude/roles/`, `~/.claude/skills/` and `~/.claude/statusline.sh` are **generated copies**. The source is the repo at `{{PROJECTS_DIR}}/claude` (GitHub `vojtahavranek/claude`), and `sync.sh` overwrites the copies from it. To change any of them:
+
+1. Edit the file in `{{PROJECTS_DIR}}/claude` on a branch from `main`. For the projects path, use the `PROJECTS_DIR` placeholder (in double curly braces, as elsewhere in the repo), not the absolute path. The repo is public, so keep secrets and private details out.
+2. Run `./sync.sh && ./validate.sh` from the repo; both must pass, and the session picks up the change.
+3. Commit, push and open a PR to `main`.
+
+An edit made directly in `~/.claude` is lost on the next sync. `~/.claude/skills/synced/` is managed by Claude Code and isn't part of the repo.
+
+### Extending
+
+- **Adding new roles**: Create new `.md` files in the repo's `roles/`
+- **Customizing existing roles**: Edit the repo's role files to match your preferences
 - **Project-specific roles**: Create role files in project directories (e.g., `./roles/` in your project)
 
 ## Role File Format

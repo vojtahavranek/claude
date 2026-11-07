@@ -174,10 +174,12 @@ Result: Documented approach, team alignment, parallel work
 
 ## Creating Custom Skills
 
+Create skills in the config repo (`skills/my-skill/`), not in `~/.claude/skills/`: `sync.sh` overwrites `~/.claude/skills/` from the repo. See "Source of truth" in the global CLAUDE.md.
+
 ### Skill Structure
 
 ```
-~/.claude/skills/my-skill/
+skills/my-skill/
 ├── SKILL.md                    # Main workflow (required)
 │   ├── Frontmatter (name, description)
 │   ├── Overview
