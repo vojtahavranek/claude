@@ -1,159 +1,214 @@
-# Validation Loop Reference
+# Validation Reference
 
-Detailed reference for the review -> fix -> re-review cycle.
+Detailed reference for the two-tier quality model: per-step duo review + post-wave integration review.
 
 ## Overview
 
-The validation loop is the quality backbone of complex-task-implementation. It replaces per-step user approval with automated, iterative code review.
+Quality assurance happens at two levels:
 
 ```
-[All waves complete]
-        |
-        v
-  +---> Code Review Agent + Test Runner (parallel)
-  |           |
-  |           v
-  |     Evaluate Results
-  |           |
-  |     PASS? --> Exit to Gate 2
-  |           |
-  |     NEEDS FIXES
-  |           |
-  |           v
-  |     Fix Agent (addresses issues)
-  |           |
-  +-----<-----+ (max 3 iterations)
+Tier 1: Per-Step Duo Review (during implementation)
+  Each step has a developer + reviewer teammate.
+  They iterate together: implement → review → fix → re-review.
+  Max 3 review rounds per duo.
+
+Tier 2: Final Integration Review (after ALL waves complete — Stage 2)
+  Checks cross-step compatibility: imports, types, API contracts.
+  Lighter than Tier 1 — individual quality already assured.
+  Max 2 iterations.
+
+Note: Each wave also has a quick integration check (build, lint, tests)
+in Stage 1 Step 5, but the full Tier 2 review runs once after all waves.
 ```
 
-## Issue Tracking Across Iterations
+## Tier 1: Per-Step Duo Review
 
-### Issue Format
-
-Each issue gets a unique identifier for tracking:
+### How the Duo Works
 
 ```
-[iteration]-[severity]-[number]
-Example: 1-CRIT-1, 1-IMP-3, 2-SUG-1
+Developer                         Reviewer
+    |                                 |
+    |-- implements step               |
+    |                                 |
+    |-- "ready for review" --------->  |
+    |                                 |-- reads changes
+    |                                 |-- reviews against checklist
+    |                                 |
+    |  <-------- feedback ----------- |
+    |                                 |
+    |-- fixes issues                  |
+    |                                 |
+    |-- "fixes applied" -----------> |
+    |                                 |-- re-reviews
+    |                                 |
+    |  <-------- APPROVED ---------- |
+    |                                 |
+    [both report completion to orchestrator]
 ```
 
-### Persistence Tracking
+### Reviewer Checklist
 
-Track which issues persist across iterations:
+Per-step reviewers focus on **individual step quality**:
+
+1. Security vulnerabilities (injection, XSS, auth bypass)
+2. Logic errors and bugs
+3. Error handling gaps
+4. Missing edge cases
+5. Code quality (naming, structure, duplication)
+6. Plan compliance (does implementation match this step's intent?)
+7. Success criteria met?
+
+**NOT in scope for per-step review** (these are Tier 2):
+- Cross-step import consistency
+- Type alignment between steps
+- API contract matching between producers and consumers
+
+### Reviewer Feedback Format
 
 ```
-Iteration 1: Found 1-CRIT-1, 1-IMP-1, 1-IMP-2, 1-SUG-1
-  Fix agent addresses: 1-CRIT-1, 1-IMP-1, 1-IMP-2
+Verdict: APPROVED | NEEDS FIXES
 
-Iteration 2: Found 2-IMP-1 (new), 1-SUG-1 (persists)
-  1-CRIT-1: RESOLVED
-  1-IMP-1: RESOLVED
-  1-IMP-2: RESOLVED
-  1-SUG-1: PERSISTS (was not auto-fixable)
-  2-IMP-1: NEW (possibly introduced by fixes)
-  Fix agent addresses: 2-IMP-1
+Critical Issues: (must fix — security, bugs, data corruption)
+- [issue] | [file:line] | [why] | [suggested fix]
 
-Iteration 3: Found 1-SUG-1 (persists)
-  All Critical/Important: RESOLVED
-  Remaining: 1 Suggested item
-  -> EXIT LOOP (only suggestions remain)
+Important Issues: (should fix — error handling, edge cases)
+- [issue] | [file:line] | [why] | [suggested fix]
+
+Suggestions: (optional — do NOT block approval for these)
+- [suggestion]
+
+What's good:
+- [praise]
+```
+
+### Duo Iteration Limits
+
+- **Max 3 review rounds** per duo
+- After round 3, reviewer MUST approve with remaining issues noted as "unresolved"
+- Unresolved issues escalate to Tier 2 integration review
+- If issues persist to Gate 2, user decides
+
+### Issue Tracking Within a Duo
+
+Each issue gets an identifier for tracking across rounds:
+
+```
+Round 1: Found C-1, I-1, I-2
+  Developer fixes: C-1, I-1, I-2
+
+Round 2: C-1 resolved, I-1 resolved, I-2 partially fixed, new I-3
+  Developer fixes: I-2 (remainder), I-3
+
+Round 3: All resolved
+  -> APPROVED
+```
+
+Or at max iterations:
+```
+Round 3: I-2 still not fully resolved
+  -> APPROVED WITH NOTES: "I-2 unresolved — [description]"
+  -> Escalates to integration review
 ```
 
 ### Regression Detection
 
-If a fix introduces new Critical/Important issues:
-- Flag it explicitly: "Fix for [issue-id] introduced new issue [new-id]"
-- The fix agent in next iteration should address both
-- If same issue ping-pongs (fixed then reintroduced), flag as "potentially unfixable by automation" and escalate
+If a fix introduces a new issue:
+- Reviewer flags it: "Fix for [issue] introduced [new issue]"
+- Developer addresses both in next round
+- If same issue ping-pongs across rounds, flag as "needs orchestrator attention"
 
-## Review Agent Output Specification
+---
 
-The review agent MUST use this structured format:
+## Tier 2: Final Integration Review (Stage 2)
+
+### Purpose
+
+After ALL waves complete, verify that independently-developed pieces work together across the full implementation. This is a single review pass over all changes, not per-wave.
+
+Note: Each wave already gets a quick integration check (build, lint, tests) in Stage 1 Step 5. Tier 2 is the deeper cross-step review.
 
 ```
-Overall: PASS | PASS WITH NOTES | NEEDS FIXES
+[ALL waves complete]
+        |
+        v
+  +---> Integration Reviewer + Test Runner (parallel)
+  |           |
+  |           v
+  |     Evaluate Results
+  |           |
+  |     PASS? --> Proceed to Gate 2
+  |           |
+  |     NEEDS FIXES
+  |           |
+  |           v
+  |     Fix (orchestrator or fix teammate)
+  |           |
+  +-----<-----+ (max 2 iterations)
+```
 
-Critical Issues: (must fix - security, bugs, data corruption, logic errors)
-- [C-1] [description] | [file:line] | [why it matters] | [suggested fix]
+### Integration Checklist
 
-Important Issues: (should fix - error handling, edge cases, quality)
-- [I-1] [description] | [file:line] | [why it matters] | [suggested fix]
+Integration reviewers focus ONLY on cross-step concerns:
 
-Suggested: (nice to have - style, refactoring)
-- [S-1] [description]
+1. **Cross-step imports/exports**: Do files from Step A correctly import from Step B's output?
+2. **Shared types**: Do type definitions from different steps align?
+3. **API contracts**: Do API consumers match producers across step boundaries?
+4. **Database/state**: Are migrations, schema changes, and data flows coherent across steps?
+5. **Configuration**: Are all new env vars, config keys consistent?
+6. **Missing glue**: Is any wiring code needed to connect steps?
+7. **Plan compliance**: Does the aggregate match the plan's overall intent?
 
-Auto-fixable: (subset of above that can be fixed without architectural changes)
-- [C-1] [fix description]  (if a critical is auto-fixable)
-- [I-1] [fix description]
+### Integration Review Output
 
-Praise:
-- [what was done well]
+```
+Overall: PASS | NEEDS FIXES
 
-Integration Check:
-- [Do changes from different implementation agents work together?]
-- [Are imports/exports consistent?]
-- [Do shared types/interfaces align?]
+Integration Issues:
+- [issue] | [files from different steps] | [which steps conflict] | [fix]
+
+Missing Glue:
+- [what needs connecting] | [between which steps]
 
 Plan Compliance:
-- [Does the implementation match the plan's intent?]
-- [Any deviations from the plan? If so, are they justified?]
+- [overall assessment]
 ```
 
-## Fix Agent Behavior
+### Decision Matrix
 
-### Priority Order
+| Integration Review | Tests | Action |
+|-------------------|-------|--------|
+| PASS | Pass | Proceed to Gate 2 |
+| PASS | Fail | Fix test failures, re-run |
+| NEEDS FIXES | Pass | Fix integration issues, re-review |
+| NEEDS FIXES | Fail | Fix both, re-review |
+| Any (iteration 2) | Any | Escalate remaining to Gate 2 |
 
-1. **Critical issues**: Always fix. These are security vulnerabilities, bugs, data corruption risks.
-2. **Important issues**: Always fix. These are error handling gaps, missing edge cases.
-3. **Test failures**: Always fix. Broken tests mean broken code.
-4. **Auto-fixable Suggested**: Fix if clearly mechanical (formatting, naming, simple style).
-5. **Non-auto-fixable Suggested**: Do NOT fix. These require architectural changes and should be noted for the user.
+### Why Max 2 Iterations (Not 3)
 
-### Fix Constraints
+Per-step quality is already handled by duos. Integration issues are typically:
+- Missing imports (1-line fix)
+- Type mismatches across boundaries (straightforward)
+- Missing wiring code (small additions)
 
-- Fix agent should make minimal changes to address issues
-- Do NOT refactor surrounding code while fixing
-- Do NOT add features or improvements beyond the fix
-- After fixing, run affected tests to verify
+These are usually resolved in 1 iteration. The 2nd iteration is a safety net, not the norm.
 
-### Fix Report
+---
 
-```
-Fixes Applied:
-- [issue-id]: [what was done] | [file:line]
-- [issue-id]: [what was done] | [file:line]
+## Escalation to User (Gate 2)
 
-Not Fixed (with reason):
-- [issue-id]: [reason - e.g., "requires architectural change", "ambiguous requirement"]
+Issues reach the user at Gate 2 when:
 
-Tests After Fixes:
-- [pass/fail count]
-- [any new failures introduced?]
-```
+1. **Duo unresolved**: A reviewer approved with notes after 3 rounds
+2. **Integration stuck**: Cross-step issues persist after 2 integration iterations
+3. **Test failures**: Tests still failing after integration fixes
+4. **Architectural issues**: Reviewer flagged something needing design-level changes
 
-## Decision Matrix
-
-| Review Result | Tests | Action |
-|--------------|-------|--------|
-| PASS | Pass | Exit loop -> Gate 2 |
-| PASS WITH NOTES | Pass | Exit loop -> Gate 2 (note suggestions) |
-| PASS | Fail | Continue loop (fix test failures) |
-| PASS WITH NOTES | Fail | Continue loop (fix test failures) |
-| NEEDS FIXES | Pass | Continue loop (fix review issues) |
-| NEEDS FIXES | Fail | Continue loop (fix both) |
-| Any (iteration 3) | Any | Exit loop -> Gate 2 (escalate remaining) |
-
-## Escalation Criteria
-
-Issues are escalated to the user at Gate 2 when:
-
-1. **Max iterations reached** (3) with unresolved Critical/Important issues
-2. **Persistent issues** that appear in all iterations (unfixable by automation)
-3. **Regression loop** where fixes keep introducing new issues
-4. **Architectural issues** flagged by reviewer as needing design changes
+At Gate 2, the user sees all unresolved issues and chooses: accept, fix more, or rollback.
 
 ## Performance Notes
 
-- Each iteration spawns 2-3 agents (reviewer + test runner + optional fix agent)
-- Typical validation: 1-2 iterations for clean code, 2-3 for complex changes
-- If iteration 1 produces PASS, the loop exits immediately (best case)
-- Budget for worst case: 3 iterations = ~9 agent invocations in validation phase
+- **Per-step duo**: 1-3 review rounds each (typically 1-2 for well-written plans)
+- **Integration check**: 1-2 iterations per wave (typically 1)
+- **Best case**: All duos approve in round 1, integration passes immediately
+- **Worst case**: 3 duo rounds + 2 integration iterations = 5 review cycles total
+- **vs old model**: Old batch review needed 3 iterations reviewing ALL code at once. Duos spread the review work across steps with better context per reviewer.

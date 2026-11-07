@@ -72,7 +72,7 @@ done
 header "3. Unresolved placeholders"
 # ============================================================================
 
-PLACEHOLDER_HITS=$(grep -r '{{[A-Z_]*}}' "$CLAUDE_DIR/CLAUDE.md" "$CLAUDE_DIR/roles/" "$CLAUDE_DIR/skills/" "$CLAUDE_DIR/statusline.sh" 2>/dev/null || true)
+PLACEHOLDER_HITS=$(grep -r --exclude-dir=synced '{{[A-Z_]*}}' "$CLAUDE_DIR/CLAUDE.md" "$CLAUDE_DIR/roles/" "$CLAUDE_DIR/skills/" "$CLAUDE_DIR/statusline.sh" 2>/dev/null || true)
 
 if [[ -z "$PLACEHOLDER_HITS" ]]; then
     pass "No unresolved {{...}} placeholders found"
@@ -115,6 +115,7 @@ done
 # Check skill files are non-empty
 for skill_dir in "$CLAUDE_DIR"/skills/*/; do
     name=$(basename "$skill_dir")
+    [[ "$name" == "synced" ]] && continue  # managed by Claude Code, not this repo
     skill_file="$skill_dir/SKILL.md"
     if [[ -f "$skill_file" && -s "$skill_file" ]]; then
         pass "skills/$name/SKILL.md is non-empty ($(wc -l < "$skill_file") lines)"

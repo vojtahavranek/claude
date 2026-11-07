@@ -1,11 +1,12 @@
-# Example: Parallel Execution with Validation
+# Example: Parallel Execution with Developer+Reviewer Duos
 
-Complete walkthrough of a multi-wave execution with 2 validation iterations.
+Complete walkthrough of a multi-wave execution using Agent Teams with duos.
 
 ## Scenario
 
 **Plan**: Add user authentication to an Express.js API
-**Steps**: 8 steps, analyzed into 3 waves
+**Steps**: 8 steps, analyzed into 4 waves
+**Agent Teams**: Enabled, developer+reviewer duos per step
 
 ## Stage 0: Dependency Analysis
 
@@ -25,15 +26,17 @@ Complete walkthrough of a multi-wave execution with 2 validation iterations.
 ### Computed Waves
 
 ```
-Wave 1 (parallel - 3 agents): Steps 1, 3, 5
+Wave 1 (3 duos, parallel): Steps 1, 3, 5
   No dependencies, all create independent files
 
-Wave 2 (parallel - 2 agents): Steps 2, 4
+Wave 2 (2 duos, parallel): Steps 2, 4
   Step 2 depends on Step 1 (User type)
   Step 4 depends on Steps 1, 3 (User model + crypto)
 
-Wave 3 (parallel - 3 agents): Steps 6, 7, 8
+Wave 3 (1 duo): Step 6
   Step 6 depends on Steps 2, 4, 5
+
+Wave 4 (2 duos, parallel): Steps 7, 8
   Step 7 depends on Steps 4, 6
   Step 8 depends on Step 6
 ```
@@ -44,230 +47,271 @@ Wave 3 (parallel - 3 agents): Steps 6, 7, 8
 Execution Strategy for: User Authentication
 
 Base commit: a1b2c3d (main)
+Agent Teams: Developer+Reviewer duos per step
 
 Wave Decomposition:
-  Wave 1 (3 steps, parallel):
-    Step 1: Create User model         -> src/models/user.ts (new)
-    Step 3: Password hashing utility   -> src/utils/crypto.ts (new)
-    Step 5: JWT configuration          -> src/config/jwt.ts (new)
+  Wave 1 (3 duos, parallel):
+    Step 1: Create User model         -> src/models/user.ts (new)      -> duo: dev + reviewer
+    Step 3: Password hashing utility   -> src/utils/crypto.ts (new)     -> duo: dev + reviewer
+    Step 5: JWT configuration          -> src/config/jwt.ts (new)       -> duo: dev + reviewer
 
-  Wave 2 (2 steps, parallel):
-    Step 2: Auth middleware            -> src/middleware/auth.ts (new)
+  Wave 2 (2 duos, parallel):
+    Step 2: Auth middleware            -> src/middleware/auth.ts (new)   -> duo: dev + reviewer
       depends on: Step 1
-    Step 4: Auth service               -> src/services/auth.ts (new)
+    Step 4: Auth service               -> src/services/auth.ts (new)    -> duo: dev + reviewer
       depends on: Steps 1, 3
 
-  Wave 3 (3 steps, parallel):
-    Step 6: Auth routes                -> src/routes/auth.ts (new)
+  Wave 3 (1 duo):
+    Step 6: Auth routes                -> src/routes/auth.ts (new)      -> duo: dev + reviewer
       depends on: Steps 2, 4, 5
-    Step 7: Auth tests                 -> tests/auth.test.ts (new)
+
+  Wave 4 (2 duos, parallel):
+    Step 7: Auth tests                 -> tests/auth.test.ts (new)      -> duo: dev + reviewer
       depends on: Steps 4, 6
-    Step 8: Mount routes               -> src/app.ts (modify)
+    Step 8: Mount routes               -> src/app.ts (modify)           -> duo: dev + reviewer
       depends on: Step 6
 
-Parallelism: 3 waves instead of 8 sequential steps
+Parallelism: 4 waves instead of 8 sequential steps
+Teammates: 8 duos (16 teammates total, max 6 active at once in Wave 1)
 Files: 7 new, 1 modified
 
 Risks:
-- Step 8 modifies existing file (src/app.ts) - will verify after merge
-- Steps 7 depends on Step 6 (in same wave) - will be handled sequentially within wave
+- Step 8 modifies existing file (src/app.ts) — will verify after merge
+
+Quality: Each step reviewed inline by paired reviewer.
+         Post-wave integration check verifies cross-step compatibility.
 ```
 
 **User selects: A) Approve and execute**
 
-> Note: Steps 6 and 7 are in the same wave but 7 depends on 6. The orchestrator should detect this and either move Step 7 to a Wave 4 or execute it sequentially within Wave 3 after Step 6 completes. In practice, the wave computation algorithm would place Step 7 in Wave 4 because its dependency (Step 6) is in Wave 3.
-
-**Corrected waves after proper topological sort:**
-```
-Wave 1: Steps 1, 3, 5
-Wave 2: Steps 2, 4
-Wave 3: Steps 6, 8
-Wave 4: Step 7
-```
-
 ## Stage 1: Execution
 
-### Wave 1 (Steps 1, 3, 5 - parallel)
+### Wave 1 (Steps 1, 3, 5 — 3 duos in parallel)
 
-Three agents spawned simultaneously:
-- Agent 1 (worktree): Creates `src/models/user.ts` with User interface and schema
-- Agent 3 (worktree): Creates `src/utils/crypto.ts` with bcrypt wrapper
-- Agent 5 (worktree): Creates `src/config/jwt.ts` with JWT secret and options
+**6 teammates spawned**: 3 developers + 3 reviewers
 
-All complete successfully. Merge sequentially:
-```bash
-git merge agent-step-1-branch --no-edit  # Clean
-git merge agent-step-3-branch --no-edit  # Clean
-git merge agent-step-5-branch --no-edit  # Clean
+#### Duo for Step 1 (User Model)
+
+```
+Developer 1:
+  - Creates src/models/user.ts with User interface, schema, password field
+  - Messages Reviewer 1: "Step 1 implementation ready for review"
+
+Reviewer 1:
+  - Reads src/models/user.ts
+  - Feedback:
+    Verdict: NEEDS FIXES
+    Important Issues:
+    - [I-1] Password field should be excluded from default serialization |
+      src/models/user.ts:15 | Leaks hashed password in API responses |
+      Add toJSON method or select exclusion
+
+Developer 1:
+  - Adds toJSON() method that omits password
+  - Messages Reviewer 1: "Fixes applied, ready for re-review"
+
+Reviewer 1:
+  - Re-reviews: toJSON properly excludes password
+  - Verdict: APPROVED
+  - Report: 2 review rounds, 1 important issue found and resolved
 ```
 
-Status: `Wave 1/4 complete: 3 steps done, 3 files created`
+#### Duo for Step 3 (Crypto Utility)
 
-### Wave 2 (Steps 2, 4 - parallel)
+```
+Developer 3:
+  - Creates src/utils/crypto.ts with bcrypt wrapper
+  - Messages Reviewer 3: "Ready for review"
 
-Two agents spawned:
-- Agent 2 (worktree): Creates auth middleware, imports User type from Step 1's output
-- Agent 4 (worktree): Creates auth service, imports User model and crypto utilities
-
-Both complete. Merge:
-```bash
-git merge agent-step-2-branch --no-edit  # Clean
-git merge agent-step-4-branch --no-edit  # Clean
+Reviewer 3:
+  - Reviews crypto.ts
+  - Verdict: APPROVED (clean implementation, proper async bcrypt usage)
+  - Report: 1 review round, no issues
 ```
 
-Status: `Wave 2/4 complete: 5 steps done, 5 files created`
+#### Duo for Step 5 (JWT Config)
 
-### Wave 3 (Steps 6, 8 - parallel)
+```
+Developer 5:
+  - Creates src/config/jwt.ts with JWT secret and token options
+  - Messages Reviewer 5: "Ready for review"
 
-Two agents spawned:
-- Agent 6 (worktree): Creates auth routes, uses middleware and service
-- Agent 8 (worktree): Modifies app.ts to mount auth routes
+Reviewer 5:
+  - Reviews jwt.ts
+  - Feedback:
+    Verdict: NEEDS FIXES
+    Critical Issues:
+    - [C-1] JWT secret hardcoded as "secret123" | src/config/jwt.ts:3 |
+      Security vulnerability | Use process.env.JWT_SECRET with error if missing
 
-Both complete. Merge:
-```bash
-git merge agent-step-6-branch --no-edit  # Clean
-git merge agent-step-8-branch --no-edit  # Clean
+Developer 5:
+  - Replaces hardcoded secret with process.env.JWT_SECRET
+  - Adds startup validation that throws if env var is missing
+  - Messages Reviewer 5: "Fixed"
+
+Reviewer 5:
+  - Re-reviews: env-based secret with proper validation
+  - Verdict: APPROVED
+  - Report: 2 review rounds, 1 critical issue found and resolved
 ```
 
-Status: `Wave 3/4 complete: 7 steps done, 6 files created, 1 modified`
+#### Wave 1 Merge & Integration Check
 
-### Wave 4 (Step 7)
-
-One agent spawned:
-- Agent 7 (worktree): Creates auth tests using actual service and route implementations
-
-Completes and merge:
+All 3 duos complete. Merge sequentially:
 ```bash
-git merge agent-step-7-branch --no-edit  # Clean
+git merge step-1-branch --no-edit  # Clean
+git merge step-3-branch --no-edit  # Clean
+git merge step-5-branch --no-edit  # Clean
 ```
 
-Status: `Wave 4/4 complete: 8/8 steps done. Moving to validation...`
+Integration check: No cross-step dependencies in Wave 1 (all independent files). Tests pass.
 
-## Stage 2: Validation
+**Status**: `Wave 1/4 complete: 3 steps done, 3 files created. 5 duo review rounds total. Integration: PASS. Moving to Wave 2...`
+
+### Wave 2 (Steps 2, 4 — 2 duos in parallel)
+
+**4 teammates spawned**: 2 developers + 2 reviewers
+
+#### Duo for Step 2 (Auth Middleware)
+
+```
+Developer 2:
+  - Creates src/middleware/auth.ts, imports User type from Step 1
+  - Messages Reviewer 2: "Ready for review"
+
+Reviewer 2:
+  - Verdict: APPROVED (clean, proper JWT verification, correct User type usage)
+  - Report: 1 review round, no issues
+```
+
+#### Duo for Step 4 (Auth Service)
+
+```
+Developer 4:
+  - Creates src/services/auth.ts, imports User model and crypto utilities
+  - Messages Reviewer 4: "Ready for review"
+
+Reviewer 4:
+  - Feedback:
+    Verdict: NEEDS FIXES
+    Important Issues:
+    - [I-1] No password length validation | src/services/auth.ts:15 |
+      Allows empty passwords | Add minimum 8 chars check
+    - [I-2] Missing await on hash function | src/services/auth.ts:22 |
+      Returns Promise instead of hash | Add await
+
+Developer 4:
+  - Adds password validation, fixes missing await
+  - Messages Reviewer 4: "Fixed both"
+
+Reviewer 4:
+  - Re-reviews: both issues resolved
+  - Verdict: APPROVED
+  - Report: 2 review rounds, 2 important issues found and resolved
+```
+
+#### Wave 2 Merge & Integration Check
+
+```bash
+git merge step-2-branch --no-edit  # Clean
+git merge step-4-branch --no-edit  # Clean
+```
+
+Integration check:
+- Step 2 imports User type from Step 1's output ✓
+- Step 4 imports User model from Step 1 and crypto from Step 3 ✓
+- All imports resolve correctly, tests pass.
+
+**Status**: `Wave 2/4 complete: 5 steps done, 5 files created. Integration: PASS. Moving to Wave 3...`
+
+### Wave 3 (Step 6 — 1 duo)
+
+```
+Duo Step 6: Developer creates auth routes using middleware (Step 2), service (Step 4),
+            and JWT config (Step 5). Reviewer approves after 1 round. Clean.
+```
+
+Merge & integration check: Routes correctly import from all prior steps. PASS.
+
+**Status**: `Wave 3/4 complete: 6 steps done, 6 files created. Integration: PASS. Moving to Wave 4...`
+
+### Wave 4 (Steps 7, 8 — 2 duos in parallel)
+
+```
+Duo Step 7: Developer creates auth tests using actual service and route implementations.
+            7 tests written. Reviewer suggests adding edge case test for expired JWT.
+            Developer adds it. 8 tests total. Approved in round 2.
+Duo Step 8: Developer modifies app.ts to mount routes, reviewer catches missing
+            error handler middleware — fixed in round 2. Approved.
+```
+
+Merge: clean. Integration: all 8 tests pass, routes mounted correctly.
+
+**Status**: `Wave 4/4 complete: 8/8 steps done. All duos approved. Moving to final validation...`
+
+## Stage 2: Integration Validation
 
 ### Iteration 1
 
-**Review Agent findings:**
+**Integration Reviewer** checks cross-step compatibility:
 ```
-Overall: NEEDS FIXES
+Overall: PASS
 
-Critical Issues:
-- [C-1] JWT secret hardcoded as "secret123" | src/config/jwt.ts:3 |
-  Security vulnerability, secret should come from environment variable |
-  Use process.env.JWT_SECRET with fallback error
-
-Important Issues:
-- [I-1] No password length validation in auth service | src/services/auth.ts:15 |
-  Allows empty or very short passwords |
-  Add minimum length check (8 chars)
-- [I-2] Missing error handling in login route | src/routes/auth.ts:28 |
-  Unhandled promise rejection if DB query fails |
-  Add try-catch wrapper
-
-Suggested:
-- [S-1] Consider adding rate limiting to auth routes
-
-Auto-fixable:
-- [C-1] Replace hardcoded secret with env variable
-- [I-1] Add password validation check
-- [I-2] Add try-catch to route handler
-
-Praise:
-- Clean separation of concerns between model, service, and routes
-- Good use of TypeScript types throughout
-
-Integration Check:
-- Imports between files are consistent
-- Type definitions align across modules
+Integration Issues: None
+Missing Glue: None
 
 Plan Compliance:
-- Implementation matches plan intent
-- JWT approach is well-structured
+- All 8 steps implemented as specified
+- JWT approach properly uses env-based configuration
+- Tests cover main flows
+
+Note: All critical issues (hardcoded JWT secret, missing password validation,
+missing await) were caught and fixed by per-step reviewers during implementation.
 ```
 
-**Test Runner results:**
+**Test Runner**:
 ```
-Tests: 5 passed, 2 failed
-- FAIL: "should reject invalid credentials" - Expected 401, got 500 (unhandled error)
-- FAIL: "should hash password on registration" - Timeout (missing await)
+Tests: 8 passed, 0 failed
 Lint: clean
 Type check: clean
 ```
 
-**Evaluation**: NEEDS FIXES -> continue to fix agent
+**Evaluation**: PASS + tests pass → Exit loop, proceed to Gate 2
 
-**Fix Agent actions:**
-- Fixed C-1: Replaced hardcoded JWT secret with `process.env.JWT_SECRET`
-- Fixed I-1: Added password length validation (min 8 chars)
-- Fixed I-2: Added try-catch to login route handler
-- Fixed test failure 1: The try-catch fix resolves the 500 -> 401 issue
-- Fixed test failure 2: Added missing `await` on hash function call
-
-### Iteration 2
-
-**Review Agent findings (fresh reviewer):**
-```
-Overall: PASS WITH NOTES
-
-Critical Issues: None
-
-Important Issues: None
-
-Suggested:
-- [S-1] Consider adding rate limiting to auth routes (persists from iteration 1)
-- [S-2] JWT_SECRET error message could include documentation link
-
-Auto-fixable: None
-
-Praise:
-- All critical and important issues from iteration 1 are properly resolved
-- Error handling is now comprehensive
-- Security improvement with env-based JWT secret is well done
-
-Integration Check: All good
-Plan Compliance: Matches plan intent
-```
-
-**Test Runner results:**
-```
-Tests: 7 passed, 0 failed
-Lint: clean
-Type check: clean
-```
-
-**Evaluation**: PASS WITH NOTES + tests pass -> Exit loop
+> **Note**: In the old model without duos, the JWT secret and password validation
+> issues would have been found in post-hoc batch review (iteration 1), fixed
+> (iteration 2), re-reviewed (iteration 2 passes). That's 2 validation iterations
+> plus 9+ agent invocations. With duos, the integration validation passed in
+> 1 iteration with 2 agent invocations because issues were already fixed inline.
 
 ## Approval Gate 2
 
 ```
-Implementation Complete - Validation Results
+Implementation Complete — Final Review
 
 Summary:
   Steps: 8/8 completed across 4 waves
   Files: 7 created, 1 modified
-  Validation: 2 iterations
+  Duo reviews: 12 review rounds across 8 duos (avg 1.5 rounds/step)
+  Integration validation: 1 iteration
 
 Quality:
-  Code Review: PASS WITH NOTES
-  Tests: 7/7 passing
+  Per-step review: 8/8 steps approved by paired reviewer
+  Integration review: PASS
+  Tests: 8/8 passing
   Type Check: clean
   Lint: clean
 
-Suggestions (optional improvements):
-1. Consider adding rate limiting to auth routes
-2. JWT_SECRET error message could include documentation link
+Issues caught by duos during implementation:
+  - Critical: 1 (hardcoded JWT secret — Step 5)
+  - Important: 4 (password serialization, validation, missing await, error handler)
+  - All resolved before integration validation
 
 Changes by Wave:
   Wave 1: User model, crypto utilities, JWT config
   Wave 2: Auth middleware, auth service
   Wave 3: Auth routes, app.ts route mounting
-  Wave 4: Auth test suite
-
-Auto-fixes Applied (during validation):
-- Replaced hardcoded JWT secret with environment variable
-- Added password length validation
-- Added error handling to login route
-- Fixed missing await in password hashing
+  Wave 4: Auth test suite (8 tests)
 ```
 
 **User selects: A) Accept all changes**
@@ -277,15 +321,28 @@ Auto-fixes Applied (during validation):
 ```
 Complex Implementation Complete: User Authentication
 
-Executed: 8 steps in 4 waves
-Validation: 2 iterations, final status: PASS WITH NOTES
+Executed: 8 steps in 4 waves using developer+reviewer duos
+Quality: 12 inline review rounds, 5 issues caught and fixed during implementation
+Integration: 1 iteration, PASS
 Files: 7 created, 1 modified
-Tests: 7/7 passing
+Tests: 8/8 passing
 
 Next steps:
 - Review the full diff: git diff a1b2c3d..HEAD
-- Commit changes: git add -A && git commit -m "Add user authentication"
+- Stage and commit changes (prefer adding specific files over git add -A)
 - Create PR if needed
 ```
 
 Task marked as completed. TASKS.md updated.
+
+## Comparison: Old Model vs Duo Model (This Example)
+
+| Metric | Old (batch review) | New (duos) |
+|--------|-------------------|------------|
+| Implementation agents | 8 (1 per step) | 16 (2 per step: dev + reviewer) |
+| Post-hoc review iterations | 2 (found 3 critical/important, fixed, re-reviewed) | 1 (PASS — issues already fixed) |
+| Issues caught | 3 (all in batch review after all code written) | 5 (caught inline, including 2 extras) |
+| When issues found | After all 8 steps complete | During each step's implementation |
+| Total agent invocations | 8 impl + 6 validation = 14 | 16 impl + 2 validation = 18 |
+| Quality confidence | Medium (batch reviewer has broad but shallow context) | High (each reviewer has deep context for their step) |
+| Fix risk | Higher (fixing in bulk can introduce regressions) | Lower (fixes are scoped to one step) |

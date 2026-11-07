@@ -131,6 +131,22 @@ When you invoke a role, Claude will:
 
 **NEVER implement first and ask questions later. ALWAYS get approval on the approach BEFORE writing code.**
 
+### CRITICAL: Verify Before Declaring Done
+
+**A task is NOT complete until all available checks pass.** After finishing any implementation, you MUST:
+
+1. **Read the project's CLAUDE.md** (or `claude.md`) to find which checks and commands are available for the repository
+2. **Run all available checks** — common ones include but are not limited to:
+   - Linting (ESLint, PHPStan, Flake8, Clippy, etc.)
+   - Formatting (Prettier, PHP-CS-Fixer, Black, etc.)
+   - Unit tests (Jest, PHPUnit, Pytest, Go test, etc.)
+   - E2E tests (Playwright, Cypress, etc.)
+   - Type checking (TypeScript, MyPy, etc.)
+   - Build/compile
+3. **Fix any failures** before reporting completion
+
+Only after **all checks pass** is the task truly finished.
+
 ### Working in Approval Loops
 
 When working on non-trivial tasks, Claude should break work into small, manageable steps and work iteratively with user approval:
@@ -304,7 +320,7 @@ Keep role definitions focused and concise (~200-250 words).
 |-------|---------|------------|
 | **product-discovery** | Discover, validate, and translate user needs to stories | `"use product discovery for [idea]"` or `"translate product brief: [path]"` |
 | **task-preparation** | Architect-led planning from requirements to steps | `"use task preparation for [feature]"` |
-| **task-implementation** | Developer-focused step-by-step execution | `"implement plan: [path/name]"` |
+| **task-implementation** | Autonomous sequential execution (dev + reviewer subagents) | `"implement plan: [path/name]"` |
 
 ### Quick Reference
 
@@ -368,7 +384,7 @@ Result: Step-by-step execution with progress tracking
 
 3. Implementation phase:
    "implement plan: ./plans/payment-processing.md"
-   → Software Developer executes step-by-step
+   → Dev + reviewer subagents execute each step, one approval up front
    → Tracks progress throughout
    → Tests and verifies each step
 
