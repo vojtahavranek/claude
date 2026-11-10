@@ -1,8 +1,9 @@
 #!/bin/bash
 # Status line script for Claude Code
-#   Opus 5.5 | ██████░░░░ 42% ⧗ 12 min | 73%↑ 1:48 | 🌿 rule-fixes
+#   Opus 5.5 | ████░░░░░░ 42% ⧗ 12 min | 73%↑ 1:48 | skyvest ⎇ fix-x #131 ✓
 # Segments (each hidden when it has no data):
-#   model | context bar + % | prompt-cache countdown | plan limit + reset | worktree
+#   model | context bar + % | prompt-cache countdown | plan limit + reset |
+#   repo + branch (🌿 in a worktree) + PR of the branch
 
 python3 -c '
 import json, os, subprocess, sys, time
@@ -65,25 +66,45 @@ def limit_segment(data, now):
         out += f"{R} {fmt_reset(reset - now)}"
     return out + R
 
-def worktree_segment(data):
+def git_info(cwd):
+    # One git call: repo root, git dirs (to spot a linked worktree), branch.
+    try:
+        out = subprocess.run(
+            ["git", "-C", cwd, "rev-parse", "--show-toplevel", "--absolute-git-dir",
+             "--git-common-dir", "--abbrev-ref", "HEAD"],
+            capture_output=True, text=True, timeout=1,
+        ).stdout.split("\n")
+    except Exception:
+        return None
+    if len(out) < 4 or not out[0]:
+        return None
+    top, git_dir, common, branch = out[:4]
+    common = os.path.realpath(os.path.join(cwd, common))
+    is_worktree = os.path.realpath(git_dir) != common
+    # Name the repo after the main checkout, also when inside a worktree.
+    repo = os.path.basename(os.path.dirname(common)) if is_worktree and os.path.basename(common) == ".git" else os.path.basename(top)
+    return repo, branch, is_worktree
+
+def repo_segment(data):
+    # repo + branch of the folder Claude is working in (follows cd), plus the branch PR.
+    cwd = (data.get("workspace") or {}).get("current_dir") or os.getcwd()
+    info = git_info(cwd)
     wt = data.get("worktree") or {}
-    name = wt.get("branch") or wt.get("name")
-    if not name:
-        # Fallback: a linked git worktree not created by Claude Code.
-        cwd = (data.get("workspace") or {}).get("current_dir") or os.getcwd()
-        try:
-            out = subprocess.run(
-                ["git", "-C", cwd, "rev-parse", "--absolute-git-dir", "--git-common-dir", "--abbrev-ref", "HEAD"],
-                capture_output=True, text=True, timeout=1,
-            ).stdout.split()
-            if len(out) == 3:
-                git_dir, common, branch = out
-                common = os.path.realpath(os.path.join(cwd, common))
-                if os.path.realpath(git_dir) != common:
-                    name = branch
-        except Exception:
-            pass
-    return f"{chr(0x1F33F)} {name}" if name else None
+    if not info and not wt:
+        return None
+    repo, branch, is_worktree = info or ("", "", False)
+    if wt:
+        branch = wt.get("branch") or wt.get("name") or branch
+        is_worktree = True
+    icon = chr(0x1F33F) if is_worktree else f"{DIM}{chr(0x2387)}{R}"
+    out = " ".join(x for x in (repo, icon, branch) if x)
+    pr = data.get("pr") or {}
+    if pr.get("number"):
+        state = pr.get("review_state")
+        mark = {"approved": f" {GREEN}{chr(0x2713)}{R}", "changes_requested": f" {RED}{chr(0x2717)}{R}"}.get(state, "")
+        num = pr.get("number")
+        out += f" #{num}{mark}"
+    return out
 
 try:
     data = json.load(sys.stdin)
@@ -93,7 +114,7 @@ try:
     cache = cache_segment(data, now)
     if ctx and cache:
         ctx = f"{ctx} {cache}"
-    parts = [model, ctx or cache, limit_segment(data, now), worktree_segment(data)]
+    parts = [model, ctx or cache, limit_segment(data, now), repo_segment(data)]
     print(SEP.join(p for p in parts if p))
 except Exception:
     print("Claude")
