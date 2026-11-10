@@ -1,9 +1,9 @@
 #!/bin/bash
 # Status line script for Claude Code
-#   Opus 5.5 | ████░░░░░░ 42% ⧗ 12 min | 73%↑ 1:48 | skyvest ⎇ fix-x #131 ✓
+#   Opus 5.5 | ████░░░░░░ 42% ⧗ 12 min | 73%↑ 1:48 | skyvest 🔀 fix-x #131 ✓
 # Segments (each hidden when it has no data):
 #   model | context bar + % | prompt-cache countdown | plan limit + reset |
-#   repo + branch (🌿 in a worktree) + PR of the branch
+#   repo + branch (🌿 instead of 🔀 in a worktree) + PR of the branch
 
 python3 -c '
 import json, os, subprocess, sys, time
@@ -96,7 +96,7 @@ def repo_segment(data):
     if wt:
         branch = wt.get("branch") or wt.get("name") or branch
         is_worktree = True
-    icon = chr(0x1F33F) if is_worktree else f"{DIM}{chr(0x2387)}{R}"
+    icon = chr(0x1F33F) if is_worktree else chr(0x1F500)
     out = " ".join(x for x in (repo, icon, branch) if x)
     pr = data.get("pr") or {}
     if pr.get("number"):
