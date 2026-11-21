@@ -331,7 +331,7 @@ Keep role definitions focused and concise (~200-250 words).
 | **product-discovery** | Discover, validate, and translate user needs to stories | `"use product discovery for [idea]"` or `"translate product brief: [path]"` |
 | **task-preparation** | Architect-led planning from requirements to steps | `"use task preparation for [feature]"` |
 | **task-implementation** | Autonomous sequential execution (dev + reviewer subagents) | `"implement plan: [path/name]"` |
-| **orchestrator-mode** | Session mode: the session orchestrates subagents and takes each feature from idea to open PR (a brief up front, then a plan wave and an implementation wave, each with author, reviewer and judge) | `"orchestrator mode"` or `"deliver feature: [what]"` |
+| **orchestrator-mode** | Session mode: the session orchestrates subagents and takes each feature from idea to open PR (a brief up front, then a lean run with a developer and a reviewer, or, for risky changes and important features, a full run: a plan wave and an implementation wave, each with author, reviewer and judge) | `"orchestrator mode"` or `"deliver feature: [what]"` |
 
 ### Quick Reference
 
@@ -340,7 +340,7 @@ Keep role definitions focused and concise (~200-250 words).
 "orchestrator mode"
 "deliver feature: export the report as CSV"
 ```
-Result: per feature, a reviewed plan + implemented, reviewed code + open PR
+Result: per feature, implemented and reviewed code + open PR (and a reviewed plan for risky changes and important features)
 
 **Got a raw idea or feature request?**
 ```
