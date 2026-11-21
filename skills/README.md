@@ -17,13 +17,14 @@
 | **task-preparation** | Architect-led planning workflow | Planning complex features, need architecture design | `"use task preparation for [feature]"` |
 | **task-implementation** | Developer-focused execution | Execute a plan autonomously, sequentially | `"implement plan: [path/name]"` |
 | **complex-task-implementation** | Autonomous parallel execution | Complex plans with independent work streams | `"execute complex plan: [path]"` |
-| **feature-delivery** | Orchestrated delivery from idea to PR | One conversation up front, then plan and implementation by subagents | `"deliver feature: [what]"` |
+| **feature-delivery** | Session mode: orchestrated delivery from idea to PR | A session of feature work run by subagents, one conversation up front per feature | `"feature delivery mode"` or `"deliver feature: [what]"` |
 
 ### feature-delivery
-**Purpose**: Take a feature from idea to an open PR, with the session as orchestrator between the user and the subagents
+**Purpose**: A session mode: the session is the orchestrator between the user and the subagents, and takes each feature the user brings from idea to an open PR
 
 **Workflow**:
-1. Brief: reads the project, asks everything in one round
+0. Once per session: reads the project, collects its checks, runs the full suite as a baseline
+1. Brief (per feature): reads the code, asks everything in one round
 2. Gate 1: user approves the run sheet (brief, risk tier, model per agent, branch, checks)
 3. Plan wave: planner → plan reviewer → judge of the review → planner revises
 4. Implementation wave: developer → code reviewer → judge of the review → developer fixes

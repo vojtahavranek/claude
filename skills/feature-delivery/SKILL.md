@@ -1,28 +1,42 @@
 ---
 name: feature-delivery
 description: |
-  Deliver a feature end to end as an orchestrator: agree the brief with the user in one conversation up front, then run autonomously to an open PR. A plan wave (planner, plan reviewer, judge of the review), then an implementation wave (developer, code reviewer, judge of the review), each agent on a model matched to the risk.
-  Use when: "deliver feature", "use feature delivery for", "orchestrate this feature", or the user wants a feature taken from idea to PR by subagents.
+  Session mode: the session becomes an orchestrator between the user and subagents, and every feature the user brings is delivered the same way. The brief is agreed with the user in one conversation, then the run is autonomous to an open PR: a plan wave (planner, plan reviewer, judge of the review), then an implementation wave (developer, code reviewer, judge of the review), each agent on a model matched to the risk.
+  Use when: "feature delivery mode", "be my orchestrator", "run this session as orchestrator", "deliver feature", or the user wants features taken from idea to PR by subagents.
   A saved plan to execute: task-implementation. A plan only, no code: task-preparation.
 ---
 
 # Feature Delivery
 
-You are the **orchestrator**: the link between the user and the subagents. You agree the **brief** with the user, dispatch, verify and deliver. Subagents write the plan and the code. Their reports are claims; the code, `git diff` and your own check runs are the truth.
+Invoking this skill puts the session in **feature delivery mode**, until the user ends it ("exit feature delivery"). In the mode you are the **orchestrator**: the link between the user and the subagents. You agree each **brief** with the user, dispatch, verify and deliver. Subagents write the plans and the code. Their reports are claims; the code, `git diff` and your own check runs are the truth.
 
-Invoking this skill is the user's request to run autonomously once the brief is agreed. Gate 1 stands in for plan approval and per-step approval.
+Every feature the user brings gets one **run**: Brief → Gate 1 → plan wave → implementation wave → deliver. The mode is the user's request to run each feature autonomously once its brief is agreed; Gate 1 stands in for plan approval and per-step approval.
 
-The run is two **waves** of three agents each. An **author** produces the artefact (the plan, then the code), a **reviewer** reads it cold, and a **judge** tests the review against the code. The judge keeps a wrong finding from being "fixed" and a missed one from shipping.
+A **wave** is three agents. An **author** produces the artefact (the plan, then the code), a **reviewer** reads it cold, and a **judge** tests the review against the code. The judge keeps a wrong finding from being "fixed" and a missed one from shipping.
+
+## Session setup
+
+Once, when the mode starts (again when the user moves to another project):
+
+1. **Read the project's CLAUDE.md / AGENTS.md.** Collect every check (split into **fast checks**, seconds, and the **full suite**), the delivery convention (PR or commit, branch naming, who merges), the docs a change must keep in step, and the areas the project calls dangerous.
+2. **Baseline.** Install the dependencies the project docs name and run the full suite once on a clean checkout of the default branch. A red baseline goes to the user before any run starts: fixing it first, or running on top of it, is their call.
+3. **Confirm the mode** in a few lines: project, checks, delivery convention, baseline result, how to leave the mode. If the user has named no feature yet, list the candidates (open issues, the project's entries in `{{PROJECTS_DIR}}/TASKS.md`).
+
+## In the mode
+
+- **Yours to do directly**: answering questions, reading code, verifying, git plumbing, delivering.
+- **A change with no judgement in it** (a typo, a rename the user dictates): one `standard` developer, then you check the diff and run the checks. No waves.
+- **Everything else is a run.** A wave runs in the background: stay with the user meanwhile, typically agreeing the next brief, and report each wave's one line when it lands.
+- **Features in flight together** each run in their own worktree. Keep a **ledger** of every run and show it when asked or when a run changes stage: feature | tier | stage | branch or PR.
 
 ## Stage 0: Brief
 
-The only interactive stage. Everything the run needs from the user is asked here.
+The only interactive stage of a run. Everything the run needs from the user is asked here.
 
-1. **Read the project's CLAUDE.md / AGENTS.md.** Collect every check (split into **fast checks**, seconds, and the **full suite**), the delivery convention (PR or commit, branch naming, who merges), the docs a change must keep in step, and the areas the project calls dangerous.
-2. **Read the code** the feature touches, far enough to ask informed questions (an Explore agent for a wide sweep).
-3. **Ask in one round**, each question with your recommendation; AskUserQuestion where the answer is a choice. Cover behaviour, edge cases, what is out of scope, acceptance criteria, and every ambiguity the code showed you.
-4. **Write the brief**: Goal / Behaviour / Out of scope / Acceptance criteria / Constraints (project rules that bind this change) / Decisions (the user's answers, in their words). It is complete when it holds no "TBD" and no product decision you made for the user. It goes verbatim into every subagent prompt.
-5. **Pick the tier** from the table below.
+1. **Read the code** the feature touches, far enough to ask informed questions (an Explore agent for a wide sweep).
+2. **Ask in one round**, each question with your recommendation; AskUserQuestion where the answer is a choice. Cover behaviour, edge cases, what is out of scope, acceptance criteria, and every ambiguity the code showed you.
+3. **Write the brief**: Goal / Behaviour / Out of scope / Acceptance criteria / Constraints (project rules that bind this change) / Decisions (the user's answers, in their words). It is complete when it holds no "TBD" and no product decision you made for the user. It goes verbatim into every subagent prompt.
+4. **Pick the tier** from the table below.
 
 ## Tiers
 
@@ -51,7 +65,7 @@ Fast checks: <commands>    Full suite: <commands>
 Delivery: <PR to the default branch | the project's convention>
 ```
 
-Adjust → revise and re-present. Several features at once: agree one brief and one run sheet each in the same conversation, then run each feature's waves in its own worktree, in parallel.
+Adjust → revise and re-present. Several features brought together: agree a brief and a run sheet for each in the same conversation, then start their runs in parallel.
 
 ## Stage 1: Plan wave
 
@@ -67,7 +81,7 @@ One line to the user, then continue without waiting:
 
 ## Stage 2: Implementation wave
 
-1. **Git preflight.** `git fetch`. A single feature and a clean main checkout → `git checkout -b feature/<feature> origin/<default>` there, so container-backed checks see the changes. Tracked files dirty, or features in parallel → `git worktree add` on a new branch from `origin/<default>`; confirm each check runs against the worktree's files, and put any that cannot on the run sheet. Record `BASE=$(git rev-parse HEAD)`. **Resume**: the branch exists with `Step N:` commits → check it out, `BASE=$(git merge-base HEAD origin/<default>)`, continue from the first missing step.
+1. **Git preflight.** `git fetch`. A single feature and a clean main checkout → `git checkout -b feature/<feature> origin/<default>` there, so container-backed checks see the changes. Tracked files dirty, or another run in flight → `git worktree add` on a new branch from `origin/<default>`; confirm each check runs against the worktree's files, and put any that cannot on the run sheet. Record `BASE=$(git rev-parse HEAD)`. **Resume**: the branch exists with `Step N:` commits → check it out, `BASE=$(git merge-base HEAD origin/<default>)`, continue from the first missing step.
 2. **Developer.** `Agent(name: "dev-<feature>", model: <implementation author model>, prompt: <Developer prompt>)`. One commit per plan step. A plan of more than about 8 steps: cut it into milestones of consecutive steps and run steps 2–6 once per milestone, each with a new developer and the diff from that milestone's first commit; the last review covers `$BASE..HEAD`.
 3. **Verify.** `git log --oneline $BASE..HEAD` and `git diff --stat $BASE..HEAD`: every commit is a plan step, every touched file belongs to the plan, every item of the plan's acceptance checklist is done (docs included). Run the full suite yourself. Red, a gap, or out-of-scope edits → SendMessage the developer with the output. **Developer blocker**: a plan error → SendMessage the planner to amend the plan, then the developer continues; a decision that is the user's → **interrupt**.
 4. **Code reviewer.** A new agent with the brief, the plan's path and the diff command, never the developer's report.
@@ -103,6 +117,8 @@ Assumptions the planner made: <list, or none>
 Unresolved: <list, or none>
 Remaining manual items: <list, or none>
 ```
+
+The run is closed; the mode goes on with the next feature.
 
 ## Interrupt
 
