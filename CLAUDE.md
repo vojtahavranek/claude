@@ -331,8 +331,15 @@ Keep role definitions focused and concise (~200-250 words).
 | **product-discovery** | Discover, validate, and translate user needs to stories | `"use product discovery for [idea]"` or `"translate product brief: [path]"` |
 | **task-preparation** | Architect-led planning from requirements to steps | `"use task preparation for [feature]"` |
 | **task-implementation** | Autonomous sequential execution (dev + reviewer subagents) | `"implement plan: [path/name]"` |
+| **feature-delivery** | Idea to open PR by subagents: one conversation up front, then a plan wave and an implementation wave, each with author, reviewer and judge | `"deliver feature: [what]"` |
 
 ### Quick Reference
+
+**Want a feature delivered end to end, with one conversation up front?**
+```
+"deliver feature: export the report as CSV"
+```
+Result: reviewed plan + implemented, reviewed code + open PR
 
 **Got a raw idea or feature request?**
 ```

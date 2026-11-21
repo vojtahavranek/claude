@@ -17,6 +17,27 @@
 | **task-preparation** | Architect-led planning workflow | Planning complex features, need architecture design | `"use task preparation for [feature]"` |
 | **task-implementation** | Developer-focused execution | Execute a plan autonomously, sequentially | `"implement plan: [path/name]"` |
 | **complex-task-implementation** | Autonomous parallel execution | Complex plans with independent work streams | `"execute complex plan: [path]"` |
+| **feature-delivery** | Orchestrated delivery from idea to PR | One conversation up front, then plan and implementation by subagents | `"deliver feature: [what]"` |
+
+### feature-delivery
+**Purpose**: Take a feature from idea to an open PR, with the session as orchestrator between the user and the subagents
+
+**Workflow**:
+1. Brief: reads the project, asks everything in one round
+2. Gate 1: user approves the run sheet (brief, risk tier, model per agent, branch, checks)
+3. Plan wave: planner → plan reviewer → judge of the review → planner revises
+4. Implementation wave: developer → code reviewer → judge of the review → developer fixes
+5. Full check suite, PR, summary
+
+**When to use**:
+- A feature not planned yet that should run without check-ins after the first conversation
+- The risk warrants a second opinion on the review itself (the judge)
+
+**Output**: Plan in `<project>/.claude/task/`, branch with one commit per step, PR, all checks green
+
+**Learn more**: `~/.claude/skills/feature-delivery/USAGE.md`
+
+---
 
 ### task-preparation
 **Purpose**: Comprehensive planning from requirements to implementation steps
