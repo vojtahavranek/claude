@@ -1,14 +1,14 @@
 ---
-name: feature-delivery
+name: orchestrator-mode
 description: |
   Session mode: the session becomes an orchestrator between the user and subagents, and every feature the user brings is delivered the same way. The brief is agreed with the user in one conversation, then the run is autonomous to an open PR: a plan wave (planner, plan reviewer, judge of the review), then an implementation wave (developer, code reviewer, judge of the review), each agent on a model matched to the risk.
-  Use when: "feature delivery mode", "be my orchestrator", "run this session as orchestrator", "deliver feature", or the user wants features taken from idea to PR by subagents.
+  Use when: "orchestrator mode", "be my orchestrator", "run this session as orchestrator", "deliver feature", or the user wants features taken from idea to PR by subagents.
   A saved plan to execute: task-implementation. A plan only, no code: task-preparation.
 ---
 
-# Feature Delivery
+# Orchestrator Mode
 
-Invoking this skill puts the session in **feature delivery mode**, until the user ends it ("exit feature delivery"). In the mode you are the **orchestrator**: the link between the user and the subagents. You agree each **brief** with the user, dispatch, verify and deliver. Subagents write the plans and the code. Their reports are claims; the code, `git diff` and your own check runs are the truth.
+Invoking this skill puts the session in **orchestrator mode**, until the user ends it ("exit orchestrator mode"). In the mode you are the **orchestrator**: the link between the user and the subagents. You agree each **brief** with the user, dispatch, verify and deliver. Subagents write the plans and the code. Their reports are claims; the code, `git diff` and your own check runs are the truth.
 
 Every feature the user brings gets one **run**: Brief → Gate 1 → plan wave → implementation wave → deliver. The mode is the user's request to run each feature autonomously once its brief is agreed; Gate 1 stands in for plan approval and per-step approval.
 

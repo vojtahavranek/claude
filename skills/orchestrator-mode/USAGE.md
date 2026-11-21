@@ -1,9 +1,9 @@
-# Feature Delivery — Usage
+# Orchestrator Mode — Usage
 
 ```
-"feature delivery mode"                  # the session becomes the orchestrator
-"deliver feature: <what you want>"       # the same, starting with this feature
-"exit feature delivery"                  # back to a normal session
+"orchestrator mode"                    # the session becomes the orchestrator
+"deliver feature: <what you want>"     # the same, starting with this feature
+"exit orchestrator mode"               # back to a normal session
 ```
 
 The mode lasts for the session. Once, at the start, the orchestrator reads the project,

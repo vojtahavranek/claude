@@ -17,9 +17,9 @@
 | **task-preparation** | Architect-led planning workflow | Planning complex features, need architecture design | `"use task preparation for [feature]"` |
 | **task-implementation** | Developer-focused execution | Execute a plan autonomously, sequentially | `"implement plan: [path/name]"` |
 | **complex-task-implementation** | Autonomous parallel execution | Complex plans with independent work streams | `"execute complex plan: [path]"` |
-| **feature-delivery** | Session mode: orchestrated delivery from idea to PR | A session of feature work run by subagents, one conversation up front per feature | `"feature delivery mode"` or `"deliver feature: [what]"` |
+| **orchestrator-mode** | Session mode: orchestrated delivery from idea to PR | A session of feature work run by subagents, one conversation up front per feature | `"orchestrator mode"` or `"deliver feature: [what]"` |
 
-### feature-delivery
+### orchestrator-mode
 **Purpose**: A session mode: the session is the orchestrator between the user and the subagents, and takes each feature the user brings from idea to an open PR
 
 **Workflow**:
@@ -36,7 +36,7 @@
 
 **Output**: Plan in `<project>/.claude/task/`, branch with one commit per step, PR, all checks green
 
-**Learn more**: `~/.claude/skills/feature-delivery/USAGE.md`
+**Learn more**: `~/.claude/skills/orchestrator-mode/USAGE.md`
 
 ---
 
