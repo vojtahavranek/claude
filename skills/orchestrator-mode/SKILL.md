@@ -27,7 +27,7 @@ Once, when the mode starts (again when the user moves to another project):
    - whether what is written to the repository host is public;
    - the docs a change must keep in step, and the areas the project calls dangerous;
    - the **machine rules**: what an agent must never do on this machine (the user's real data and configuration, the running product and its ports, anything outside the checkout). Ask the user for what the docs do not say, and whether they run the product from the main checkout.
-2. **Baseline.** Install the dependencies the project docs name and run the full suite once on `origin/<default>`, on every supported runtime version (one that is not installed here goes under "Checks that cannot run in this checkout" and is left to CI): in the main checkout when it is clean and already there, otherwise in a temporary worktree, leaving a checkout that holds work as it is. A red baseline goes to the user before any run starts: fixing it first, or running on top of it, is their call. On top of it, the failing tests are the **known failures**: name them beside the full suite wherever it appears (run sheet, developer prompt, summary), and green means nothing else fails.
+2. **Baseline.** Install the dependencies the project docs name and run the full suite once on `origin/<default>`, on every supported runtime version (one that is not installed here goes under "Checks that cannot run in this checkout" and is left to CI; where CI does not run either, tell the user in step 4: installing it or accepting the gap is their call, and an accepted gap is named under "Not proven" in every summary): in the main checkout when it is clean and already there, otherwise in a temporary worktree, leaving a checkout that holds work as it is. A red baseline goes to the user before any run starts: fixing it first, or running on top of it, is their call. On top of it, the failing tests are the **known failures**: name them beside the full suite wherever it appears (run sheet, developer prompt, summary), and green means nothing else fails.
 3. **Session scratch.** Pick one folder outside every checkout for the session. A run's Scratch is `<session scratch>/<feature>`; the lock for full-suite runs is `<session scratch>/fullrun.lock`, one for the whole session, the baseline included.
 4. **Confirm the mode** in a few lines, so the user can correct them: project, checks, runtime versions, machine rules, whether the host is public, delivery convention, baseline result, how to leave the mode. A `[~]` entry of this project in `{{PROJECTS_DIR}}/TASKS.md` is a run to resume: re-read the run sheet and the rulings at the head of its plan file and enter at the stage its plan and branch show. If the user has named no feature yet, list the candidates (open issues, the project's `[ ]` entries in TASKS.md).
 
@@ -59,12 +59,12 @@ Risk sets the tier; size does not.
 | Tier | When | Shape | Plan: author / reviewer / judge | Implementation: author / reviewer / judge |
 |------|------|-------|------|------|
 | `light` | Docs, copy, isolated UI; a failure is visible and harmless | lean | high / high / standard | standard / high / standard |
-| `normal` | A feature with logic | lean | high / top / high | high (standard when the change is mechanical) / top / high |
+| `normal` | A feature with logic | lean; full when **important** | high / top / high | high (standard when the change is mechanical) / top / high |
 | `risky` | Touches a data store or migration, auth or secrets, money, install/uninstall or the user's system config, deploy, a public interface, concurrency, or an area the project docs call dangerous | full | top / top / high | high / top / high |
 
 `top` is the strongest model available (Fable), `high` is Opus, `standard` is Sonnet; pass it as the Agent tool's `model`.
 
-A lean run uses the implementation column's author and reviewer, and no judge. The shape in the table is the default: propose lean for a `risky` change whose brief settles every design decision, and full for a `normal` one whose design is still open, where a wrong plan would be found only in the code review.
+A lean run uses the implementation column's author and reviewer, and no judge. The shape in the table is the default. A `normal` feature that is **important** runs full: the user calls it important, its design is still open after the brief, other work will build on it, or it is likely to need more than about 8 steps (a lean run has one developer and no milestones). In each of these a wrong plan would be found only in the code review. Propose lean for a `risky` change whose brief settles every design decision.
 
 For a case the table does not cover: the plan outranks the implementation, a reviewer is at least as strong as its author, and the judge may sit one level below the reviewer.
 
@@ -344,7 +344,7 @@ Read-only: change no file except under <scratch path>.
 
 <Rules block>
 
-Reviewed: <the plan at <plan path>, against the checkout <path> | the diff: `git -C <checkout> diff <BASE>..HEAD`, written to the plan at <plan path>>
+Reviewed: <the plan at <plan path>, against the checkout <path> | the diff: `git -C <checkout> diff <BASE>..<sha>` (the commit the review is about), written to the plan at <plan path>>
 <Milestone only: "Steps <N–M> are built so far; the later steps are not yet.">
 Review, verbatim:
 <the review>

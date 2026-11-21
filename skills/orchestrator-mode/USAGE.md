@@ -20,7 +20,7 @@ bring:
    - **lean** (two agents) — a developer builds from the brief, tests first; a reviewer
      checks the brief and the code together and proves its findings by running them;
      the orchestrator rules on the findings.
-   - **full** (six agents) — a plan wave (planner, plan reviewer, a judge of the
+   - **full** (six agents), for risky changes and important features — a plan wave (planner, plan reviewer, a judge of the
      review), then an implementation wave (developer, code reviewer, a judge of the
      review).
 
@@ -36,11 +36,13 @@ author:
 | Tier | Shape | Plan: author / reviewer / judge | Implementation: author / reviewer / judge |
 |------|-------|------|------|
 | `light` (docs, copy, isolated UI) | lean | Opus / Opus / Sonnet | Sonnet / Opus / Sonnet |
-| `normal` (a feature with logic) | lean | Opus / Fable / Opus | Opus / Fable / Opus |
+| `normal` (a feature with logic) | lean; full when important | Opus / Fable / Opus | Opus / Fable / Opus |
 | `risky` (data, auth, money, install, deploy) | full | Fable / Fable / Opus | Opus / Fable / Opus |
 
-A lean run uses the implementation column's author and reviewer, and no judge. Overrule
-the tier, the shape or any single model at Gate 1.
+A lean run uses the implementation column's author and reviewer, and no judge. A `normal`
+feature runs full when it is important: you call it important, its design is still open
+after the brief, other work will build on it, or it is likely to need more than about 8
+steps. Overrule the tier, the shape or any single model at Gate 1.
 
 It only stops mid-run for real blockers: a decision that is yours and the brief left
 open, a Critical finding or red checks that survive the fix rounds, an action the

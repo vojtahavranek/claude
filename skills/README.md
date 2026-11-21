@@ -27,7 +27,7 @@
 1. Brief (per feature): reads the code, asks everything in one round
 2. Gate 1: user approves the run sheet (brief, risk tier, shape, model per agent, estimate, branch, checks)
 3. A lean run: developer builds from the brief → reviewer checks brief and code, proving findings by running them → orchestrator rules → developer fixes → reviewer re-checks
-4. A full run (the default for risky changes): plan wave (planner → plan reviewer → judge of the review → planner revises → reviewer re-checks), then implementation wave (developer → code reviewer → judge of the review → developer fixes → reviewer re-checks)
+4. A full run (the default for risky changes and for important features): plan wave (planner → plan reviewer → judge of the review → planner revises → reviewer re-checks), then implementation wave (developer → code reviewer → judge of the review → developer fixes → reviewer re-checks)
 5. Full check suite on the final commit on every supported runtime version, PR, summary
 
 **When to use**:
