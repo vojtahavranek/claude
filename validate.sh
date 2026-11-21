@@ -58,6 +58,7 @@ REQUIRED_FILES=(
     "skills/task-implementation/SKILL.md"
     "skills/product-discovery/SKILL.md"
     "skills/complex-task-implementation/SKILL.md"
+    "skills/orchestrator-mode/SKILL.md"
 )
 
 for file in "${REQUIRED_FILES[@]}"; do
