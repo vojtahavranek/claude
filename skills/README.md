@@ -23,18 +23,18 @@
 **Purpose**: A session mode: the session is the orchestrator between the user and the subagents, and takes each feature the user brings from idea to an open PR
 
 **Workflow**:
-0. Once per session: reads the project, collects its checks, runs the full suite as a baseline
+0. Once per session: reads the project, collects its checks, runtime versions and machine rules, runs the full suite as a baseline
 1. Brief (per feature): reads the code, asks everything in one round
-2. Gate 1: user approves the run sheet (brief, risk tier, model per agent, branch, checks)
-3. Plan wave: planner → plan reviewer → judge of the review → planner revises
-4. Implementation wave: developer → code reviewer → judge of the review → developer fixes
-5. Full check suite, PR, summary
+2. Gate 1: user approves the run sheet (brief, risk tier, shape, model per agent, estimate, branch, checks)
+3. A lean run: developer builds from the brief → reviewer checks brief and code, proving findings by running them → orchestrator rules → developer fixes → reviewer re-checks
+4. A full run (the default for risky changes): plan wave (planner → plan reviewer → judge of the review → planner revises → reviewer re-checks), then implementation wave (developer → code reviewer → judge of the review → developer fixes → reviewer re-checks)
+5. Full check suite on the final commit on every supported runtime version, PR, summary
 
 **When to use**:
 - A feature not planned yet that should run without check-ins after the first conversation
-- The risk warrants a second opinion on the review itself (the judge)
+- A full run when the risk warrants a reviewed plan and a second opinion on the review itself (the judge)
 
-**Output**: Plan in `<project>/.claude/task/`, branch with one commit per step, PR, all checks green
+**Output**: Run sheet, brief and rulings (and the plan of a full run) in `<project>/.claude/task/`, branch with one commit per step, PR, all checks green
 
 **Learn more**: `~/.claude/skills/orchestrator-mode/USAGE.md`
 
