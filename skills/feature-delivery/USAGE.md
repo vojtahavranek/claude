@@ -43,5 +43,11 @@ flight together each get their own worktree. Ask for "status" to see the ledger 
 **Small asks**: questions the orchestrator answers itself; a change with no judgement in
 it (a typo, a dictated rename) gets one developer agent and no waves.
 
+**Resume**: start the mode again. Each run's brief and run sheet are saved at the head
+of its plan file, and a run marked `[~]` in TASKS.md is picked up where it stopped.
+
+**A red baseline**: you choose between fixing it first and working on top of it; on top,
+the failing tests are carried as known failures in every run.
+
 **Already have a plan?** `"implement plan: <path>"` (task-implementation).
 **Want the plan only?** `"use task preparation for <feature>"`.

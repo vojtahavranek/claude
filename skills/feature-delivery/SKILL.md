@@ -12,30 +12,29 @@ Invoking this skill puts the session in **feature delivery mode**, until the use
 
 Every feature the user brings gets one **run**: Brief → Gate 1 → plan wave → implementation wave → deliver. The mode is the user's request to run each feature autonomously once its brief is agreed; Gate 1 stands in for plan approval and per-step approval.
 
-A **wave** is three agents. An **author** produces the artefact (the plan, then the code), a **reviewer** reads it cold, and a **judge** tests the review against the code. The judge keeps a wrong finding from being "fixed" and a missed one from shipping.
+A **wave** is three agents. An **author** produces the artefact (the plan, then the code), a **reviewer** reads it cold, and a **judge** tests the review against the code.
 
 ## Session setup
 
 Once, when the mode starts (again when the user moves to another project):
 
-1. **Read the project's CLAUDE.md / AGENTS.md.** Collect every check (split into **fast checks**, seconds, and the **full suite**), the delivery convention (PR or commit, branch naming, who merges), the docs a change must keep in step, and the areas the project calls dangerous.
-2. **Baseline.** Install the dependencies the project docs name and run the full suite once on a clean checkout of the default branch. A red baseline goes to the user before any run starts: fixing it first, or running on top of it, is their call.
-3. **Confirm the mode** in a few lines: project, checks, delivery convention, baseline result, how to leave the mode. If the user has named no feature yet, list the candidates (open issues, the project's entries in `{{PROJECTS_DIR}}/TASKS.md`).
+1. **Read the project's CLAUDE.md / AGENTS.md.** Collect every check (split into **fast checks**, seconds, and the **full suite**), whether CI runs on pull requests, the delivery convention (PR or commit, branch naming, who merges), the docs a change must keep in step, and the areas the project calls dangerous.
+2. **Baseline.** Install the dependencies the project docs name and run the full suite once on `origin/<default>`: in the main checkout when it is clean and already there, otherwise in a temporary worktree, leaving a checkout that holds work as it is. A red baseline goes to the user before any run starts: fixing it first, or running on top of it, is their call. On top of it, the failing tests are the **known failures**: name them beside the full suite wherever it appears (run sheet, developer prompt, summary), and green means nothing else fails.
+3. **Confirm the mode** in a few lines: project, checks, delivery convention, baseline result, how to leave the mode. A `[~]` entry of this project in `{{PROJECTS_DIR}}/TASKS.md` is a run to resume: re-read the run sheet at the head of its plan file and enter at the stage its plan and branch show. If the user has named no feature yet, list the candidates (open issues, the project's `[ ]` entries in TASKS.md).
 
 ## In the mode
 
 - **Yours to do directly**: answering questions, reading code, verifying, git plumbing, delivering.
-- **A change with no judgement in it** (a typo, a rename the user dictates): one `standard` developer, then you check the diff and run the checks. No waves.
-- **Everything else is a run.** A wave runs in the background: stay with the user meanwhile, typically agreeing the next brief, and report each wave's one line when it lands.
-- **Features in flight together** each run in their own worktree. Keep a **ledger** of every run and show it when asked or when a run changes stage: feature | tier | stage | branch or PR.
+- **A change with no judgement in it** (a typo, a rename the user dictates): one `standard` developer on its own branch from `origin/<default>`, in a checkout chosen as for a run; you check the diff, run the fast checks and deliver per the project's convention. No waves.
+- **Everything else is a run.** A wave runs in the background: stay with the user meanwhile, typically agreeing the next brief.
+- **Checkout.** A run works in the main checkout when that is clean, at `origin/<default>` and held by no other run, so container-backed checks see the changes. Otherwise it gets its own worktree before its brief (`git worktree add <path> -b <branch> --no-track origin/<default>`), so its brief, plan and reviews read the default branch.
+- Keep a **ledger** of every run and show it when asked or when a run changes stage: feature | tier | stage | branch or PR.
 
 ## Stage 0: Brief
 
-The only interactive stage of a run. Everything the run needs from the user is asked here.
-
 1. **Read the code** the feature touches, far enough to ask informed questions (an Explore agent for a wide sweep).
 2. **Ask in one round**, each question with your recommendation; AskUserQuestion where the answer is a choice. Cover behaviour, edge cases, what is out of scope, acceptance criteria, and every ambiguity the code showed you.
-3. **Write the brief**: Goal / Behaviour / Out of scope / Acceptance criteria / Constraints (project rules that bind this change) / Decisions (the user's answers, in their words). It is complete when it holds no "TBD" and no product decision you made for the user. It goes verbatim into every subagent prompt.
+3. **Write the brief**: Goal / Behaviour / Out of scope / Acceptance criteria / Constraints (project rules that bind this change) / Decisions (the user's answers, in their words). It is complete when it holds no "TBD" and no product decision you made for the user.
 4. **Pick the tier** from the table below.
 
 ## Tiers
@@ -50,43 +49,39 @@ Risk sets the tier; size does not.
 
 `top` is the strongest model available (Fable), `high` is Opus, `standard` is Sonnet; pass it as the Agent tool's `model`.
 
-For a case the table does not cover: the plan outranks the implementation (a wrong plan is implemented faithfully and then reviewed against itself), and a reviewer is at least as strong as its author. The judge may sit one level below the reviewer: testing a claim someone pointed at is easier than finding it, and you re-check its Critical calls yourself.
+For a case the table does not cover: the plan outranks the implementation, a reviewer is at least as strong as its author, and the judge may sit one level below the reviewer.
 
 ## Gate 1: Run sheet
 
-Present, then ask with AskUserQuestion (Go / Adjust / Cancel):
+For a worktree, first confirm each check runs against its files. Present, then ask with AskUserQuestion (Go / Adjust / Cancel):
 
 ```
 Feature: <name>        Tier: <tier> (<the reason>)
 Brief: <the brief>
 Models: plan <author/reviewer/judge>, implementation <author/reviewer/judge>
 Branch: <branch> from <default branch>    Checkout: <main checkout | worktree path>
-Fast checks: <commands>    Full suite: <commands>
+Fast checks: <commands>    Full suite: <commands> (known failures: <list | none>)
+Checks that cannot run in this checkout: <list | none>
 Delivery: <PR to the default branch | the project's convention>
 ```
 
-Adjust → revise and re-present. Several features brought together: agree a brief and a run sheet for each in the same conversation, then start their runs in parallel.
+Adjust → revise and re-present. Go → save the run sheet as the head of `<project>/.claude/task/<feature>.md` and register it in TASKS.md as `[~]`. Several features brought together: agree a brief and a run sheet for each in the same conversation, then start their runs in parallel.
 
 ## Stage 1: Plan wave
 
-1. **Planner.** `Agent(name: "planner-<feature>", model: <plan author model>, prompt: <Planner prompt>)`. It writes `<project>/.claude/task/<feature>.md`.
+1. **Planner.** `Agent(name: "planner-<feature>", model: <plan author model>, prompt: <Planner prompt>)`. It writes the plan below the run sheet.
 2. **Read the plan yourself** against the brief: every acceptance criterion lands in a step, nothing out of scope is planned. A gap → SendMessage the planner.
-3. **Plan reviewer.** A new agent with the brief and the plan's path, never the planner's report.
-4. **Judge.** A new agent with the brief, the plan's path and the review verbatim. `light` tier: skip the judge when the review holds no Critical and no Important.
-5. **Act on the ruling** (the rules are under **Rulings and rounds**): the planner revises the plan in place. A finding that turns on a product decision the brief leaves open → **interrupt**; any other open choice the planner makes and records under Assumptions.
-6. Register the plan in `{{PROJECTS_DIR}}/TASKS.md` as `[~]`.
+3. **Review, judge, act** per **Rulings and rounds**: the planner revises the plan in place. A finding that turns on a product decision the brief leaves open → **interrupt**; any other open choice the planner makes and records under Assumptions.
 
 One line to the user, then continue without waiting:
 `Plan ✓ <path> — <N> steps — review: <confirmed> confirmed, <rejected> rejected, <rounds> round(s)`
 
 ## Stage 2: Implementation wave
 
-1. **Git preflight.** `git fetch`. A single feature and a clean main checkout → `git checkout -b feature/<feature> origin/<default>` there, so container-backed checks see the changes. Tracked files dirty, or another run in flight → `git worktree add` on a new branch from `origin/<default>`; confirm each check runs against the worktree's files, and put any that cannot on the run sheet. Record `BASE=$(git rev-parse HEAD)`. **Resume**: the branch exists with `Step N:` commits → check it out, `BASE=$(git merge-base HEAD origin/<default>)`, continue from the first missing step.
-2. **Developer.** `Agent(name: "dev-<feature>", model: <implementation author model>, prompt: <Developer prompt>)`. One commit per plan step. A plan of more than about 8 steps: cut it into milestones of consecutive steps and run steps 2–6 once per milestone, each with a new developer and the diff from that milestone's first commit; the last review covers `$BASE..HEAD`.
-3. **Verify.** `git log --oneline $BASE..HEAD` and `git diff --stat $BASE..HEAD`: every commit is a plan step, every touched file belongs to the plan, every item of the plan's acceptance checklist is done (docs included). Run the full suite yourself. Red, a gap, or out-of-scope edits → SendMessage the developer with the output. **Developer blocker**: a plan error → SendMessage the planner to amend the plan, then the developer continues; a decision that is the user's → **interrupt**.
-4. **Code reviewer.** A new agent with the brief, the plan's path and the diff command, never the developer's report.
-5. **Judge.** A new agent with the brief, the plan's path, the diff command and the review verbatim. `light` tier: skip the judge when the review holds no Critical and no Important.
-6. **Act on the ruling** (**Rulings and rounds**): the developer commits the fixes as `Review: <what>`; re-run the full suite.
+1. **Branch.** In the main checkout: `git fetch`, then `git checkout -b <branch> --no-track origin/<default>` (a worktree is already on its branch). Record `BASE=$(git rev-parse HEAD)`. **Resume**: the branch has `Step N:` commits → check it out (in its worktree if it has one), `BASE=$(git merge-base HEAD origin/<default>)`, continue from the first missing step with a new developer, told the tree may hold that step's unfinished work.
+2. **Developer.** `Agent(name: "dev-<feature>", model: <implementation author model>, prompt: <Developer prompt>)`. One commit per plan step. A plan of more than about 8 steps: cut it into milestones of consecutive steps and run steps 2–4 once per milestone, each with a new developer (`dev-<feature>-<k>`) and the diff from the HEAD recorded before it; tell reviewer and judge which steps exist so far, and check the acceptance checklist only at the last milestone, whose review covers `$BASE..HEAD`.
+3. **Verify.** `git log --oneline $BASE..HEAD` and `git diff --stat $BASE..HEAD`: every commit is a plan step, every touched file belongs to the plan, every item of the plan's acceptance checklist is done (docs included). Run the full suite yourself. Red, a gap, or out-of-scope edits → SendMessage the developer with the output. **Developer blocker**: a plan error → SendMessage the planner to amend the plan, read the amendment as in Stage 1 step 2, then the developer continues.
+4. **Review, judge, act** per **Rulings and rounds**: the developer commits the fixes as `Review: <what>`; re-run the full suite.
 
 One line to the user: `Implementation ✓ <N> commits — checks green — review: <confirmed> confirmed, <rejected> rejected, <rounds> round(s)`
 
@@ -94,31 +89,30 @@ One line to the user: `Implementation ✓ <N> commits — checks green — revie
 
 The same rules close both waves.
 
-- **To fix.** The judge's "To fix" list (confirmed and MISSED findings, Critical and Important) goes to the wave's author by SendMessage: same agent, context intact. With the judge skipped, the reviewer's findings are the list.
-- **Critical calls are yours to re-check.** Open the code for every Critical the judge REJECTED or reported as MISSED. A rejected one that holds joins "To fix"; a missed one that does not hold is dropped.
-- **Round 2** runs only when round 1 ended with a Critical in "To fix": a fresh reviewer and judge on the revised artefact (the whole revised plan; for code, the whole diff). Paste into the reviewer's prompt round 1's "To fix" list and its rejected findings with the reasons, so it checks the fixes and does not re-raise what was settled.
-- **After round 2**: Importants go to the author once, with no further review; one the author cannot fix is recorded as **unresolved**. A Critical in round 2's "To fix" → **interrupt**.
+- **Review and judge.** A new reviewer gets the brief, the checkout, the plan's path and, for code, the diff command, never the author's report; a new judge gets the same plus the review verbatim. `light` tier: a review with no Critical and no Important needs no judge and no fix.
+- **Critical calls are yours to re-check.** Open the code for every Critical the judge REJECTED, downgraded or reported as MISSED. A rejected or downgraded one that holds joins "To fix" as a Critical; a missed one that does not hold is dropped.
+- **To fix.** The judge's "To fix" list, after your re-check, goes to the wave's author by SendMessage: same agent, context intact.
+- **Round 2** runs only when round 1 ended with a Critical in "To fix": a fresh reviewer and judge on the revised artefact (the whole revised plan; for code, the whole diff), with the Round 2 line of their prompts filled in.
+- **After round 2**: Importants go to the author once, with no further review; one the author cannot fix is recorded as **unresolved**. A Critical still in "To fix" after your re-check → **interrupt**.
 
 ## Stage 3: Deliver
 
-1. **Full suite green on your own run** at the final HEAD. The feature is not done while a check is red.
+1. **Full suite green on your own run** at the final HEAD.
 2. **Acceptance.** Tick every acceptance criterion of the brief against the code or a check run. List what only the user can do (manual checks, production steps).
-3. **Deliver** per the project's convention: push, `gh pr create` to the default branch, wait for CI. Red CI goes back to the developer, then push again; max 2 fix rounds, then **interrupt**. Merging stays with the user.
-4. Mark the plan `[x]` in `{{PROJECTS_DIR}}/TASKS.md`.
+3. **Deliver** per the project's convention: `git push -u origin <branch>`, `gh pr create` to the default branch, wait for CI where the project runs it. Red CI goes back to the developer, then push again; max 2 fix rounds, then **interrupt**. Merging stays with the user.
+4. Mark the plan `[x]` in TASKS.md.
 5. **Summary:**
 
 ```
 Done: <feature>  —  <tier>, <N> commits on <branch>
-PR: <url> (CI: <status>)
-Checks: <each command — pass>
+PR: <url> (CI: <status | none>)
+Checks: <each command — pass> (known failures: <list | none>)
 Acceptance: <each criterion — how it was verified>
 Plan review: <confirmed/rejected, rounds>    Code review: <confirmed/rejected, rounds>
 Assumptions the planner made: <list, or none>
 Unresolved: <list, or none>
 Remaining manual items: <list, or none>
 ```
-
-The run is closed; the mode goes on with the next feature.
 
 ## Interrupt
 
@@ -133,7 +127,7 @@ State what happened, what you tried, and 2–3 options with your recommendation.
 
 ## Prompts
 
-A subagent knows only its prompt: paste the brief in full, and name files and docs by path. Paste the **Severity** block into both reviewer prompts and the judge prompt.
+A subagent knows only its prompt: paste the brief in full, and name files and docs by path.
 
 ### Severity
 
@@ -155,13 +149,14 @@ approval-waiting rule. You change no code.
 Brief:
 <the brief>
 
+Checkout: <path>
 Project docs to read first: <CLAUDE.md / AGENTS.md, design docs, by path>
 Checks the project runs: <fast checks; full suite>
 
 Work:
 1. Read the code the feature touches and its tests until you can name every file that
    changes and why. Ground each claim about the code in a file:line you read.
-2. Write the plan to <path>:
+2. Write the plan to <path>, below the run sheet already there:
    - Goal, and Out of scope (from the brief)
    - Design: the approach, the alternatives you rejected and why
    - Steps, each one committable with the checks green: title, files, what and how,
@@ -189,7 +184,7 @@ orchestrator. Read-only: change no files.
 Brief:
 <the brief>
 
-Plan: <path>
+Plan: <path>    Checkout: <path>
 Project docs: <paths>
 
 The plan is a set of claims about this codebase. Open the files it names and test
@@ -200,8 +195,9 @@ break a rule in the project docs, what does the plan change that it does not men
 
 <Severity block>
 
-<Round 2 only: "Round 1 fixed: <To fix list>. Round 1 rejected: <findings and reasons>.
-Check that each fix holds; re-raise a rejected finding only with new evidence.">
+<Round 2 only: "Round 1 fixed: <To fix list>. Round 1 rejected or dropped: <findings and
+reasons>. Check that each fix holds; raise a rejected or dropped finding again only with
+new evidence.">
 
 Output:
 Findings, numbered: <severity> | <issue> | <plan section + file:line> | <why> | <fix>
@@ -219,13 +215,15 @@ Brief:
 
 Plan: <path>   Steps to implement: <all | N–M>
 Checkout: <path>, on branch <branch>
-Fast checks: <commands>    Full suite: <commands>
+Fast checks: <commands>
+Full suite: <commands> (known failures, not yours to fix: <list | none>)
+<Resume only: "Steps 1–<K> are committed; the tree may hold unfinished work of step <K+1>.">
 
 Work, for each step in order:
-1. Read the files in scope and their neighbours; match the surrounding code's style.
-2. Implement the step with its tests.
-3. Run the fast checks until green.
-4. Commit exactly this step's files: `git commit -m "Step <N>: <title>"` <attribution trailer>.
+1. Implement the step with its tests.
+2. Run the fast checks until green.
+3. Stage exactly this step's files and commit as `Step <N>: <title>`, the message
+   ending with: <attribution trailer>
 After the last step, run the full suite until green.
 
 Work only in this checkout, with the test and development fixtures the checks use.
@@ -251,16 +249,18 @@ Brief:
 Plan: <path>
 Diff: run `git -C <checkout> diff <BASE>..HEAD`; read the surrounding code as needed.
 Project docs: <paths>
+<Milestone only: "Steps <N–M> are built so far; the later steps are not yet.">
 
-Check: correctness and edge cases, error handling, security, tests that would fail if
-the behaviour broke, every acceptance criterion of the brief met, the plan followed
-(a deviation is a finding unless it is clearly an improvement), the project's rules
-kept, consistency with the codebase. Flag only what you can point to in the diff.
+Check, beyond the role's list: tests that would fail if the behaviour broke, every
+acceptance criterion of the brief met, the plan followed (a deviation is a finding
+unless it is clearly an improvement), the project's rules kept. Flag only what you can
+point to in the diff.
 
 <Severity block>
 
-<Round 2 only: "Round 1 fixed: <To fix list>. Round 1 rejected: <findings and reasons>.
-Check that each fix holds; re-raise a rejected finding only with new evidence.">
+<Round 2 only: "Round 1 fixed: <To fix list>. Round 1 rejected or dropped: <findings and
+reasons>. Check that each fix holds; raise a rejected or dropped finding again only with
+new evidence.">
 
 Output:
 Findings, numbered: <severity> | <issue> | <file:line> | <why> | <fix>
@@ -276,7 +276,8 @@ Read-only: change no files.
 Brief:
 <the brief>
 
-Reviewed: <the plan at <path> | the diff: `git -C <checkout> diff <BASE>..HEAD`, written to the plan at <path>>
+Reviewed: <the plan at <path>, against the checkout <path> | the diff: `git -C <checkout> diff <BASE>..HEAD`, written to the plan at <path>>
+<Milestone only: "Steps <N–M> are built so far; the later steps are not yet.">
 Review, verbatim:
 <the review>
 
@@ -291,6 +292,9 @@ Then one pass of your own over the part where a mistake would cost the most: wha
 the review miss? Report those as MISSED.
 
 <Severity block>
+
+<Round 2 only: "Round 1 fixed: <To fix list>. Round 1 rejected or dropped: <findings and
+reasons>. Confirm a rejected or dropped finding only on new evidence.">
 
 Output:
 Rulings: <finding #> | <CONFIRMED | RESEVERITY → severity | REJECTED> | <file:line> | <reason>
