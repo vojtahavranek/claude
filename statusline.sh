@@ -1,8 +1,9 @@
 #!/bin/bash
 # Status line script for Claude Code
-#   Opus 5.5 | ████░░░░░░ 42% ⧗ 12 min | 73%↑ 1:48 | skyvest 🔀 fix-x #131 ✓
+#   Opus 5.5 | ████░░░░░░ 42% ⧗ 12 min | 5h 73%↑ 1:48 · 7d 62% 3d 4h | skyvest 🔀 fix-x #131 ✓
 # Segments (each hidden when it has no data):
-#   model | context bar + % | prompt-cache countdown | plan limit + reset |
+#   model | context bar + % | prompt-cache countdown |
+#   plan limits + reset (5h always, 7d only above 50%) |
 #   repo + branch (🌿 instead of 🔀 in a worktree) + PR of the branch
 
 python3 -c '
@@ -44,27 +45,34 @@ def fmt_reset(secs):
     h, m = divmod(rem // 60, 60)
     return f"{d}d {h}h" if d else f"{h}:{m:02d}"
 
-def limit_segment(data, now):
-    # The window closest to its limit; ↑ = usage running ahead of elapsed time.
-    rl = data.get("rate_limits") or {}
-    best = None
-    for name, length in WINDOWS.items():
-        w = rl.get(name) or {}
-        pct, reset = w.get("used_percentage"), w.get("resets_at")
-        if pct is None:
-            continue
-        if best is None or pct > best[0]:
-            best = (pct, reset, length)
-    if best is None:
-        return None
-    pct, reset, length = best
-    out = f"{level_color(pct)}{pct:.0f}%"
+WINDOW_LABELS = {"five_hour": "5h", "seven_day": "7d"}
+WEEKLY_SHOW_ABOVE = 50  # the 7d window is shown only once it is past this %
+
+def window_segment(name, w, now):
+    # e.g. "5h 73%↑ 1:48"; ↑ = usage running ahead of elapsed time.
+    pct, reset = w.get("used_percentage"), w.get("resets_at")
+    length = WINDOWS[name]
+    out = f"{DIM}{WINDOW_LABELS[name]}{R} {level_color(pct)}{pct:.0f}%"
     if reset:
         elapsed_pct = 100 * (length - (reset - now)) / length
         if pct > elapsed_pct:
             out += chr(0x2191)
         out += f"{R} {fmt_reset(reset - now)}"
     return out + R
+
+def limit_segment(data, now):
+    # The 5h window always; the 7d window too once it is past WEEKLY_SHOW_ABOVE.
+    rl = data.get("rate_limits") or {}
+    parts = []
+    for name in WINDOWS:
+        w = rl.get(name) or {}
+        pct = w.get("used_percentage")
+        if pct is None:
+            continue
+        if name == "seven_day" and pct <= WEEKLY_SHOW_ABOVE:
+            continue
+        parts.append(window_segment(name, w, now))
+    return f" {DIM}{chr(0x00B7)}{R} ".join(parts) or None
 
 def git_info(cwd):
     # One git call: repo root, git dirs (to spot a linked worktree), branch.
