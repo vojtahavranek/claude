@@ -1,8 +1,8 @@
 ---
 name: orchestrator-mode
 description: |
-  Session mode: the session becomes an orchestrator between the user and subagents, and every feature the user brings is taken from a brief agreed in one conversation to an open PR, each agent on a model matched to the risk.
-  Use when: "orchestrator mode", "be my orchestrator", "run this session as orchestrator", "deliver feature", or the user wants features taken from idea to PR by subagents.
+  Session mode: the session becomes an orchestrator between the user and subagents, and every feature the user brings is taken from a brief agreed in one conversation to an open PR (supervised) or on to a merged one with no further questions (autonomous), each agent on a model matched to the risk.
+  Use when: "orchestrator mode", "autonomous orchestrator mode", "be my orchestrator", "run this session as orchestrator", "deliver feature", "deliver feature autonomously", or the user wants features taken from idea to PR, or to merge, by subagents.
   A saved plan to execute: task-implementation. A plan only, no code: task-preparation.
 ---
 
@@ -10,12 +10,33 @@ description: |
 
 Invoking this skill puts the session in **orchestrator mode**, until the user ends it ("exit orchestrator mode"). In the mode you are the **orchestrator**: the link between the user and the subagents. You agree each **brief** with the user, dispatch, rule, verify and deliver. Subagents write the plans and the code. Their reports are claims; the code, `git diff` and your own check runs are the truth.
 
-Every feature the user brings gets one **run**: Brief → Gate 1 → plan wave (a `full` run only) → implementation wave → deliver. The mode is the user's request to run each feature autonomously once its brief is agreed; Gate 1 stands in for plan approval and per-step approval.
+Every feature the user brings gets one **run**: Brief → Gate 1 → plan wave (a `full` run only) → implementation wave → deliver. The mode is the user's request to run each feature without step-by-step approval once its brief is agreed; Gate 1 stands in for plan approval and per-step approval.
 
 A run has one of two **shapes**, set at Gate 1:
 
 - **lean** (two agents): a developer builds from the brief, and a reviewer checks the brief and the code together. You rule on the findings.
 - **full** (six agents): a plan wave, then an implementation wave. A **wave** is three agents: an **author** produces the artefact (the plan, then the code), a **reviewer** reads it cold, and a **judge** tests the review against the code.
+
+## Autonomy
+
+Every run has an **autonomy**, named on its run sheet:
+
+- **supervised** (the default): the run ends at an open PR and stops for the user at each **Interrupt**.
+- **autonomous**: the run ends at a merged PR, and past Gate 1 it asks nothing: it **decides** or it **parks**. "Autonomous orchestrator mode" makes it the session's default; "deliver feature autonomously", or the user's word at Gate 1, sets it for one run.
+
+An autonomous run differs from a supervised one in four places, all written in this section:
+
+1. **Gate 1 is the last question.** In a lean run it stands where it is. In a full run it moves behind the plan wave: after the brief, save the run sheet and register the run as Gate 1's Go does, show the sheet to the user with the time the plan will take, and run Stage 1. A product decision the plan wave finds open waits for the gate, where a supervised run interrupts. Then present Gate 1 with the run sheet, the plan's Design, step titles and Assumptions, the review's outcome, and each open decision as its own question with your recommendation. Adjust → the planner revises, the reviewer re-checks a change to the Design or the steps, and you present again; Cancel → take the run out of TASKS.md. In either shape, ask before Go everything you can foresee the run needing from the user.
+2. **Decide.** Past Gate 1, a decision that is the user's and the brief leaves open is yours: take your recommendation, preferring the option that stays inside the brief and the project's documented principles, then the one cheapest to undo. Record it under Rulings as `Decided for you`, with the option set aside and how to undo it. Work beyond the brief is left out and named as a follow-up.
+3. **Park.** Every other **Interrupt** condition parks the run. So does a decision whose every option breaks the brief or a documented principle, and an agent stopped by something only the user can renew. An open Critical or red checks first get one further fix round, from a new author on `top`. To park: stop the run's agents, write under Rulings what happened, what you tried and the options with your recommendation, mark the run `[-]` in TASKS.md, and tell the user in one message (with a push notification where the harness has one). A parked run whose Stage 3 gate is green is still delivered, as a draft PR with the open point at the head of its body. A parked run stays unmerged; the other runs go on.
+4. **Merge.** The run sheet's Merge line reads "you", within the project's **merge terms**, and Stage 3 step 5 is yours. A change with no judgement in it is merged on the same terms.
+
+**Merge terms.** Once per project, before its first autonomous Gate 1, find out two facts and ask about each one that holds (AskUserQuestion):
+
+- *A merge to the default branch deploys* (a deploy webhook, a CI deploy job, the project docs). May you merge with nobody watching the deploy? Offer: every run / every run except `risky` ones (your recommendation) / none.
+- *The default branch requires a review.* Where the user's account can bypass it (`gh pr merge --admin`): may you, for this session's own PRs? Recommend yes.
+
+A run the answers exclude, and every run under a required review that has no bypass, ends at its open PR. The answers go on the Merge line of every run sheet of the project, where the user can change them for one run.
 
 ## Session setup
 
@@ -23,13 +44,13 @@ Once, when the mode starts (again when the user moves to another project):
 
 1. **Read the project's CLAUDE.md / AGENTS.md.** Collect:
    - every check, split into **fast checks** (seconds) and the **full suite**, and every **runtime version** the project supports (its CI matrix);
-   - whether CI runs on pull requests, and the delivery convention (PR or commit, branch naming, who merges);
+   - whether CI runs on pull requests, and the delivery convention (PR or commit, branch naming, who merges and by which merge method);
    - whether what is written to the repository host is public;
    - the docs a change must keep in step, and the areas the project calls dangerous;
    - the **machine rules**: what an agent must never do on this machine (the user's real data and configuration, the running product and its ports, anything outside the checkout). Ask the user for what the docs do not say, and whether they run the product from the main checkout.
 2. **Baseline.** Install the dependencies the project docs name and run the full suite once on `origin/<default>`, on every supported runtime version (one that is not installed here goes under "Checks that cannot run in this checkout" and is left to CI; where CI does not run either, tell the user in step 4: installing it or accepting the gap is their call, and an accepted gap is named under "Not proven" in every summary): in the main checkout when it is clean and already there, otherwise in a temporary worktree, leaving a checkout that holds work as it is. A red baseline goes to the user before any run starts: fixing it first, or running on top of it, is their call. On top of it, the failing tests are the **known failures**: name them beside the full suite wherever it appears (run sheet, developer prompt, summary), and green means nothing else fails.
 3. **Session scratch.** Pick one folder outside every checkout for the session. A run's Scratch is `<session scratch>/<feature>`; the lock for full-suite runs is `<session scratch>/fullrun.lock`, one for the whole session, the baseline included.
-4. **Confirm the mode** in a few lines, so the user can correct them: project, checks, runtime versions, machine rules, whether the host is public, delivery convention, baseline result, how to leave the mode. A `[~]` entry of this project in `{{PROJECTS_DIR}}/TASKS.md` is a run to resume: re-read the run sheet and the rulings at the head of its plan file and enter at the stage its plan and branch show. If the user has named no feature yet, list the candidates (open issues, the project's `[ ]` entries in TASKS.md).
+4. **Confirm the mode** in a few lines, so the user can correct them: project, checks, runtime versions, machine rules, whether the host is public, delivery convention, the session's autonomy, baseline result, how to leave the mode. A `[~]` entry of this project in `{{PROJECTS_DIR}}/TASKS.md` is a run to resume: re-read the run sheet and the rulings at the head of its plan file and enter at the stage its plan and branch show. A `[-]` entry is a parked run: show the user its open point from the rulings, and resume it on their answer. If the user has named no feature yet, list the candidates (open issues, the project's `[ ]` entries in TASKS.md).
 
 ## In the mode
 
@@ -37,7 +58,7 @@ Once, when the mode starts (again when the user moves to another project):
 - **A change with no judgement in it** (a typo, a rename the user dictates): one `standard` developer on its own branch from `origin/<default>`, in a checkout chosen as for a run; you check the diff, run the fast checks and deliver per the project's convention. No waves.
 - **Everything else is a run.** A wave runs in the background: stay with the user meanwhile, typically agreeing the next brief.
 - **Checkout.** A run works in the main checkout when that is clean, at `origin/<default>`, held by no other run and not the one the user runs the product from, so container-backed checks see the changes. Otherwise it gets its own worktree before its brief (`git worktree add <path> -b <branch> --no-track origin/<default>`), so its brief, plan and reviews read the default branch.
-- Keep a **ledger** of every run and show it when asked or when a run changes stage: feature | tier and shape | stage | branch or PR.
+- Keep a **ledger** of every run and show it when asked or when a run changes stage: feature | tier, shape and autonomy | stage (or parked) | branch or PR.
 - **Rulings.** Every decision you take mid-run, and every answer of the user, goes under `## Rulings` in the run's plan file, dated, when it is made. Agents read that section, and a ruling replaces the brief's or the plan's words. After a compaction the plan file is how you resume.
 - **Messages cross.** A subagent may read a message late, after the work it was meant to change. Every report, review and check run names the commit it is about; a result on a commit that has since moved does not count. Fixes go out as one batch per round, after the whole list. When a late ruling changes finished work, ask for one small follow-up batch and have only that re-checked.
 - **One full-suite run at a time.** Every full-suite run on the machine, yours and each agent's, takes the session's lock first (`until mkdir <session scratch>/fullrun.lock; do sleep 20; done` in the foreground, repeated if the tool times out; the holder writes its name and commit into it and removes it after the run): suites run side by side fail tests that pass alone. A lock whose holder no longer runs is yours to remove. A test that fails under load and passes alone is a **known flaky test**: the suite counts as green when that test's file passes alone and the suite passes on one repeat; name the test in the summary. Anything else red is red.
@@ -70,10 +91,11 @@ For a case the table does not cover: the plan outranks the implementation, a rev
 
 ## Gate 1: Run sheet
 
-For a worktree, first confirm each check runs against its files. Present, then ask with AskUserQuestion (Go / Adjust / Cancel):
+For a worktree, first confirm each check runs against its files. Present, then ask with AskUserQuestion (Go / Adjust / Cancel); an autonomous full run reaches this gate after its plan wave (**Autonomy**):
 
 ```
 Feature: <name>        Tier: <tier> (<the reason>)        Shape: <lean | full> (<the reason>)
+Autonomy: <supervised | autonomous>
 Brief: <the brief>
 Models: <lean: developer / reviewer | full: plan <author/reviewer/judge>, implementation <author/reviewer/judge>>
 Estimate: <agents, rough duration>; cheaper: <what a smaller shape or tier would leave out | nothing smaller>
@@ -82,7 +104,8 @@ Scratch: <session scratch>/<feature> (agents' copies and their evidence)
 Fast checks: <commands>    Full suite: <commands> on <runtime versions> (known failures: <list | none>)
 Checks that cannot run in this checkout: <list | none>
 Shared ground: <other runs that touch the same files, and the order they land in | none>
-Delivery: <PR to the default branch | the project's convention>    Merge: <the user | you, on the gate of Stage 3>
+Delivery: <PR to the default branch | the project's convention>
+Merge: <the user | you, on the gate of Stage 3 [, bypassing the required review]>    A merge deploys: <no | yes, verified by <how>>
 ```
 
 Adjust → revise and re-present. Go → save the run sheet as the head of `<project>/.claude/task/<feature>.md`, with an empty `## Rulings` under it, and register it in TASKS.md as `[~]`. Several features brought together: agree a brief and a run sheet for each in the same conversation, then start their runs in parallel. Runs that share files land in the order the run sheets name. The later one still opens its PR; once the earlier one is merged, by you or by the user, it takes in the default branch, and its re-check and the gate of Stage 3 run again on the new commit.
@@ -95,7 +118,7 @@ A lean run skips this stage: its brief is its plan.
 2. **Read the plan yourself** against the brief: every acceptance criterion lands in a step, nothing out of scope is planned. A gap → SendMessage the planner.
 3. **Review, judge, act** per **Rulings and rounds**: the planner revises the plan in place. A finding that turns on a product decision the brief leaves open → **interrupt**; any other open choice the planner makes and records under Assumptions.
 
-One line to the user, then continue without waiting:
+One line to the user, then continue without waiting (an autonomous run: then Gate 1):
 `Plan ✓ <path> — <N> steps — review: <confirmed> confirmed, <rejected> rejected, <rounds> round(s)`
 
 ## Stage 2: Implementation wave
@@ -127,13 +150,20 @@ The same rules close both waves.
 2. **The gate.** The full suite green on your own run: a clean tree at the final HEAD, every supported runtime version, under the lock. A green run on an earlier commit does not count; any commit after it means the gate again.
 3. **Acceptance.** Tick every acceptance criterion of the brief against the code or a check run. List what only the user can do (manual checks, production steps) and what no test can show (**not proven**: behaviour that needs the real system, a guess about another program).
 4. **Deliver** per the project's convention: `git push -u origin <branch>`, `gh pr create` to the default branch, naming the issue it closes if there is one; wait for CI where the project runs it. Red CI goes back to the developer, then push again; max 2 fix rounds, then **interrupt**.
-5. **Merge.** Merging stays with the user unless the run sheet says you merge. Then merge only this session's own PRs, only with the gate green on exactly the PR's head (`gh pr merge --match-head-commit <sha>`) and CI green where the project runs it. Afterwards `git diff <gated sha> <merge commit>` must show only what the default branch gained meanwhile; anything else goes to the user. Never approve a PR by someone else, and never bypass a review it requires.
+5. **Merge.** Merging stays with the user unless the run sheet says you merge. Then merge only this session's own PRs, by the project's merge method, only with the gate green on exactly the PR's head (`gh pr merge --match-head-commit <sha>`) and CI green where the project runs it. A required review is bypassed (`--admin`) only where the Merge line grants it; approving a PR is never yours. After your merge:
+   - `git diff <gated sha> <merge commit>` shows only what the default branch gained meanwhile;
+   - where the merge deploys, the deploy is verified the way the project docs say;
+   - the run's worktree and local branch are removed.
+
+   A merge diff that shows more, or a deploy that failed or cannot be verified, means **stop merging**: no further merge in that project this session, and the user is told at once (with a push notification where the harness has one). Repairing production is theirs.
 6. Mark the plan `[x]` in TASKS.md.
 7. **Summary:**
 
 ```
-Done: <feature>  —  <tier>, <shape>, <N> commits on <branch>
-PR: <url> (CI: <status | none>)
+Done: <feature>  —  <tier>, <shape>, <autonomy>, <N> commits on <branch>
+PR: <url> (CI: <status | none>; <open | merged as <sha> | draft, parked>)
+Deploy: <how the deploy was verified | none>
+Decided for you: <autonomous: each decision that was yours: the option taken, the one set aside, how to undo it | none>
 What you will see: <the change in the product, in plain words>
 Checks: <each command — pass, on <runtime versions>> (known failures: <list | none>; known flaky tests met: <list | none>)
 Acceptance: <each criterion — how it was verified>
@@ -145,15 +175,17 @@ Not proven: <what no test shows, and how the user can check it | none>
 Remaining manual items: <list, or none>
 ```
 
+A parked run gets the same summary, headed `Parked: <feature>  —  <the open point>`.
+
 ## Interrupt
 
-Mid-run, stop and AskUserQuestion only for:
+Mid-run, a supervised run stops and asks (AskUserQuestion) only for the conditions below. An autonomous run past Gate 1 decides or parks on them (**Autonomy**).
 
 - a decision that is the user's and the brief leaves open: product behaviour, breaking a principle the project documents, scope well beyond the brief;
 - a confirmed Critical still open after the re-check or round 2, or checks red after 2 fix rounds;
 - the plan (in a lean run, the brief) contradicting the code in a way neither its author nor you can settle;
 - an action the permission system or the user refused, when the run cannot finish without it;
-- anything destructive or outward-facing beyond the PR: a deploy, a migration on real data, deleting data.
+- anything destructive or outward-facing beyond the PR and a merge the run sheet grants: a deploy by hand, a migration on real data, deleting data.
 
 State what happened, what you tried, and 2–3 options with your recommendation. Everything else you decide, record under Rulings and note in the summary.
 
