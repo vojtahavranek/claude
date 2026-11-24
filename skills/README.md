@@ -17,10 +17,10 @@
 | **task-preparation** | Architect-led planning workflow | Planning complex features, need architecture design | `"use task preparation for [feature]"` |
 | **task-implementation** | Developer-focused execution | Execute a plan autonomously, sequentially | `"implement plan: [path/name]"` |
 | **complex-task-implementation** | Autonomous parallel execution | Complex plans with independent work streams | `"execute complex plan: [path]"` |
-| **orchestrator-mode** | Session mode: orchestrated delivery from idea to PR | A session of feature work run by subagents, one conversation up front per feature | `"orchestrator mode"` or `"deliver feature: [what]"` |
+| **orchestrator-mode** | Session mode: orchestrated delivery from idea to PR, or autonomously to merge | A session of feature work run by subagents, one conversation up front per feature | `"orchestrator mode"`, `"autonomous orchestrator mode"` or `"deliver feature: [what]"` |
 
 ### orchestrator-mode
-**Purpose**: A session mode: the session is the orchestrator between the user and the subagents, and takes each feature the user brings from idea to an open PR
+**Purpose**: A session mode: the session is the orchestrator between the user and the subagents, and takes each feature the user brings from idea to an open PR (supervised) or on to a merged one with no further questions (autonomous)
 
 **Workflow**:
 0. Once per session: reads the project, collects its checks, runtime versions and machine rules, runs the full suite as a baseline
@@ -29,9 +29,11 @@
 3. A lean run: developer builds from the brief → reviewer checks brief and code, proving findings by running them → orchestrator rules → developer fixes → reviewer re-checks
 4. A full run (the default for risky changes and for important features): plan wave (planner → plan reviewer → judge of the review → planner revises → reviewer re-checks), then implementation wave (developer → code reviewer → judge of the review → developer fixes → reviewer re-checks)
 5. Full check suite on the final commit on every supported runtime version, PR, summary
+6. An autonomous run: the gate of a full run comes after the reviewed plan; afterwards the orchestrator takes its own recommendation on open decisions, parks the run on a real blocker, and merges within the merge terms agreed once per project (merges that deploy, bypassing a required review)
 
 **When to use**:
 - A feature not planned yet that should run without check-ins after the first conversation
+- Autonomous, when the features should also be merged while you are away
 - A full run when the risk warrants a reviewed plan and a second opinion on the review itself (the judge)
 
 **Output**: Run sheet, brief and rulings (and the plan of a full run) in `<project>/.claude/task/`, branch with one commit per step, PR, all checks green
